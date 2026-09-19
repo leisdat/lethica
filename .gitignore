@@ -30,18 +30,26 @@ graph/edges.json
 graph/index.json
 graph/observability.json
 
-# Router tokens & API keys
+# 🔴 SENSITIVE - API KEYS & TOKENS
+config.toml  # Contains routerku API keys
 .rk_key*
 *.routerku.*.json
 routerku.log
 9router/
 .kiro_tokens.json
+.git-credentials
+.github-credentials.txt
+
+# Test files and profiles (not part of main codebase)
+agent-profile*.html
+_live_hello_log.txt
+*_test.py
 
 # Temporary files
 *.log
 *.tmp
-*_test.py
-_test_*/
+*_backup*
+*/backup*
 
 # OS generated
 .DS_Store
