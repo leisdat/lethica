@@ -1,0 +1,48 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated data files (auto-generated, not source code)
+workspace-index.db
+http-cache.db
+history.json
+task-history.json
+skill-registry.json
+strategy-registry.json
+task-failures.json
+skill-evolution-history.json
+
+# Runtime state
+workspace/
+sessions/
+logs/
+memory/
+backups/
+graph/nodes.json
+graph/edges.json
+graph/index.json
+graph/observability.json
+
+# Router tokens & API keys
+.rk_key*
+*.routerku.*.json
+routerku.log
+9router/
+.kiro_tokens.json
+
+# Temporary files
+*.log
+*.tmp
+*_test.py
+_test_*/
+
+# OS generated
+.DS_Store
+Thumbs.db

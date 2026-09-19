@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lethica — Agent Profile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05060c;
+    --bg2:#0a0d18;
+    --glass:rgba(20,26,44,0.45);
+    --glass-2:rgba(28,36,60,0.35);
+    --stroke:rgba(120,160,255,0.14);
+    --stroke-hi:rgba(120,200,255,0.35);
+    --ink:#eaf0ff;
+    --ink-2:#9fb0d8;
+    --ink-3:#5d6b94;
+    --accent:#5b8cff;
+    --accent-2:#9b6bff;
+    --accent-3:#28e0c8;
+    --good:#2ee6a0;
+    --warn:#ffcc66;
+    --danger:#ff6b8a;
+    --glow:0 0 24px rgba(91,140,255,0.35);
+    --r:18px;
+    --r-sm:12px;
+    --sp:clamp(14px,2vw,22px);
+    --font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:var(--font);
+    background:var(--bg);
+    color:var(--ink);
+    min-height:100vh;
+    overflow-x:hidden;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ambient glow orbs */
+  .orb{position:fixed;border-radius:50%;filter:blur(70px);opacity:.22;z-index:0;pointer-events:none;animation:float 26s ease-in-out infinite}
+  .orb.a{width:34vw;height:34vw;background:radial-gradient(circle,#3a5bff,transparent 70%);top:-10vw;left:-7vw}
+  .orb.b{width:30vw;height:30vw;background:radial-gradient(circle,#9b6bff,transparent 70%);bottom:-12vw;right:-8vw;animation-delay:-8s}
+  .orb.c{width:20vw;height:20vw;background:radial-gradient(circle,#28e0c8,transparent 70%);top:42%;left:58%;opacity:.12;animation-delay:-14s}
+  @keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(2vw,-3vw) scale(1.08)}}
+  .grid-bg{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:linear-gradient(rgba(120,160,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(120,160,255,.04) 1px,transparent 1px);
+    background-size:46px 46px;mask-image:radial-gradient(circle at 50% 30%,#000,transparent 85%)}
+
+  .wrap{position:relative;z-index:2;max-width:1240px;margin:0 auto;padding:clamp(16px,3vw,40px)}
+
+  /* glass primitive */
+  .glass{background:var(--glass);backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);
+    border:1px solid var(--stroke);border-radius:var(--r);box-shadow:0 8px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05)}
+
+  /* HEADER */
+  header.profile{display:flex;gap:var(--sp);align-items:center;padding:clamp(18px,3vw,30px);margin-bottom:var(--sp);flex-wrap:wrap}
+  .avatar{position:relative;width:clamp(86px,12vw,128px);height:clamp(86px,12vw,128px);flex:0 0 auto}
+  .avatar svg{width:100%;height:100%;filter:drop-shadow(0 0 18px rgba(91,140,255,.55))}
+  .avatar .ring{position:absolute;inset:-7px;width:calc(100% + 14px);height:calc(100% + 14px);animation:spin 8s linear infinite;transform-origin:50% 50%}
+  .avatar .ring circle{stroke-linecap:round}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .status-dot{position:absolute;right:6px;bottom:6px;width:18px;height:18px;border-radius:50%;background:var(--good);
+    border:3px solid var(--bg2);box-shadow:0 0 0 0 rgba(46,230,160,.6);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(46,230,160,.55)}70%{box-shadow:0 0 0 12px rgba(46,230,160,0)}100%{box-shadow:0 0 0 0 rgba(46,230,160,0)}}
+
+  .id-block{flex:1 1 260px;min-width:240px}
+  .id-block h1{font-size:clamp(26px,4vw,40px);font-weight:800;letter-spacing:-.5px;
+    background:linear-gradient(120deg,#fff,#9b6bff 55%,#28e0c8);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .id-block .sub{color:var(--ink-2);font-size:14px;margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:600;
+    border:1px solid var(--stroke-hi);background:var(--glass-2);color:var(--ink)}
+  .badge.live{color:var(--good);border-color:rgba(46,230,160,.4)}
+  .badge.live .d{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 8px var(--good)}
+  .ver{font-family:var(--mono);color:var(--accent-3);font-size:12px}
+
+  .chat-btn{margin-left:auto;align-self:center;flex:0 0 auto}
+  .btn{display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;border:1px solid var(--stroke-hi);
+    background:linear-gradient(120deg,rgba(91,140,255,.9),rgba(155,107,255,.85));color:#fff;font-weight:700;font-size:14.5px;
+    cursor:pointer;transition:.25s;box-shadow:var(--glow);text-decoration:none}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 0 36px rgba(120,160,255,.6);filter:brightness(1.08)}
+  .btn:active{transform:translateY(0)}
+  .btn svg{width:18px;height:18px}
+
+  /* LAYOUT */
+  .grid{display:grid;gap:var(--sp);grid-template-columns:repeat(12,1fr)}
+  .col-3{grid-column:span 3}.col-4{grid-column:span 4}.col-5{grid-column:span 5}
+  .col-6{grid-column:span 6}.col-7{grid-column:span 7}.col-8{grid-column:span 8}.col-12{grid-column:span 12}
+  @media(max-width:1000px){.col-3,.col-4,.col-5,.col-6,.col-7,.col-8{grid-column:span 12}}
+  @media(min-width:1001px) and (max-width:1240px){.col-3{grid-column:span 4}.col-4{grid-column:span 6}.col-5{grid-column:span 6}.col-7{grid-column:span 7}.col-8{grid-column:span 8}}
+
+  .card{padding:clamp(16px,2vw,22px)}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:1.4px;color:var(--ink-3);font-weight:700;margin-bottom:14px;
+    display:flex;align-items:center;gap:8px}
+  .card h2 .ic{width:15px;height:15px;color:var(--accent)}
+
+  /* stat tiles */
+  .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .stat{background:var(--glass-2);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:14px}
+  .stat .k{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.6px}
+  .stat .v{font-size:22px;font-weight:800;margin-top:3px;font-family:var(--mono);color:var(--ink)}
+  .stat .v small{font-size:12px;color:var(--ink-2);font-weight:500}
+
+  /* capability pills */
+  .pills{display:flex;flex-wrap:wrap;gap:8px}
+  .pill{font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid var(--stroke);background:var(--glass-2);
+    color:var(--ink-2);display:inline-flex;gap:7px;align-items:center;transition:.2s}
+  .pill:hover{border-color:var(--stroke-hi);color:var(--ink);transform:translateY(-1px)}
+  .pill .d{width:6px;height:6px;border-radius:50%;background:var(--accent-3);box-shadow:0 0 6px var(--accent-3)}
+
+  /* tools list */
+  .tlist{display:flex;flex-direction:column;gap:9px}
+  .tool{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:var(--r-sm);background:var(--glass-2);
+    border:1px solid var(--stroke);transition:.2s}
+  .tool:hover{border-color:var(--stroke-hi);transform:translateX(3px)}
+  .tool .ti{width:32px;height:32px;flex:0 0 auto;border-radius:9px;display:grid;place-items:center;
+    background:linear-gradient(135deg,rgba(91,140,255,.25),rgba(155,107,255,.18));border:1px solid var(--stroke-hi)}
+  .tool .ti svg{width:16px;height:16px;color:var(--accent)}
+  .tool .tn{font-weight:600;font-size:13.5px}
+  .tool .td{font-size:11.5px;color:var(--ink-3)}
+
+  /* skills grid */
+  .skills{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+  .skill{background:var(--glass-2);border:1px solid var(--stroke);border-radius:var(--r-sm);padding:11px;transition:.2s;position:relative;overflow:hidden}
+  .skill:hover{border-color:var(--stroke-hi);transform:translateY(-2px)}
+  .skill .sn{font-size:12.5px;font-weight:600;font-family:var(--mono)}
+  .skill .sa{position:absolute;top:8px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--accent-3);box-shadow:0 0 6px var(--accent-3)}
+  .skill.auto{border-color:rgba(155,107,255,.4)}
+  .skill.auto .sa{background:var(--accent-2);box-shadow:0 0 8px var(--accent-2)}
+  .skill .st{font-size:10px;color:var(--ink-3);margin-top:3px}
+
+  /* model + provider bars */
+  .model-card{display:flex;flex-direction:column;gap:12px}
+  .model-head{display:flex;align-items:center;gap:12px}
+  .model-icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));font-weight:800;font-family:var(--mono);color:#fff;box-shadow:var(--glow)}
+  .model-name{font-size:17px;font-weight:700}
+  .model-meta{font-size:12px;color:var(--ink-3);font-family:var(--mono)}
+  .providers{display:flex;flex-direction:column;gap:7px}
+  .prov{display:flex;align-items:center;gap:10px;font-size:12.5px}
+  .prov .pd{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 6px var(--good)}
+  .prov .pn{font-family:var(--mono);color:var(--ink-2);flex:1}
+  .prov .pt{color:var(--ink-3);font-size:11px}
+  .chain{margin-top:6px;padding:10px 12px;border-radius:var(--r-sm);background:rgba(40,224,200,.07);border:1px solid rgba(40,224,200,.25);
+    font-family:var(--mono);font-size:11.5px;color:var(--accent-3)}
+
+  /* timeline */
+  .timeline{position:relative;padding-left:22px}
+  .timeline::before{content:"";position:absolute;left:6px;top:4px;bottom:4px;width:2px;
+    background:linear-gradient(var(--accent),var(--accent-2),transparent)}
+  .tl-item{position:relative;padding:0 0 18px 4px}
+  .tl-item::before{content:"";position:absolute;left:-20px;top:4px;width:11px;height:11px;border-radius:50%;
+    background:var(--accent);box-shadow:0 0 10px var(--accent);border:2px solid var(--bg2)}
+  .tl-item .tt{font-size:13px;font-weight:600}
+  .tl-item .td{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+  .tl-item .tl{font-family:var(--mono);font-size:10.5px;color:var(--accent-3);margin-top:3px}
+
+  /* memory / tasks / achievements */
+  .bars{display:flex;flex-direction:column;gap:11px}
+  .bar-row{display:flex;flex-direction:column;gap:5px}
+  .bar-row .bl{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-2)}
+  .bar-row .bl b{color:var(--ink);font-family:var(--mono)}
+  .bar{height:7px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-3));
+    width:0;transition:width 1.2s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 10px rgba(91,140,255,.5)}
+
+  .ach{display:flex;flex-direction:column;gap:9px}
+  .ach-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:var(--r-sm);background:var(--glass-2);border:1px solid var(--stroke)}
+  .ach-item .medal{width:30px;height:30px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;font-size:15px;
+    background:linear-gradient(135deg,#ffcc66,#ff8a5c);box-shadow:0 0 14px rgba(255,180,80,.5)}
+  .ach-item .at{font-size:13px;font-weight:600}
+  .ach-item .ad{font-size:11px;color:var(--ink-3)}
+
+  .tasks{display:flex;flex-direction:column;gap:8px}
+  .task{display:flex;align-items:center;gap:10px;font-size:13px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+  .task .chk{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--stroke-hi);flex:0 0 auto;display:grid;place-items:center;font-size:11px}
+  .task.done .chk{background:var(--good);border-color:var(--good);color:#04130d}
+  .task.done .tx{color:var(--ink-3);text-decoration:line-through}
+  .task .tx{flex:1}
+  .task .tg{font-size:10.5px;color:var(--ink-3);font-family:var(--mono)}
+
+  /* permissions / settings */
+  .perm{display:flex;flex-direction:column;gap:10px}
+  .perm-row{display:flex;align-items:flex-start;gap:11px}
+  .perm-row .pic{width:30px;height:30px;flex:0 0 auto;border-radius:9px;display:grid;place-items:center;background:var(--glass-2);border:1px solid var(--stroke)}
+  .perm-row .pic svg{width:15px;height:15px;color:var(--accent-3)}
+  .perm-row .pt{font-size:13px;font-weight:600}
+  .perm-row .pd{font-size:11.5px;color:var(--ink-3)}
+
+  .settings{display:flex;flex-direction:column;gap:12px}
+  .set-row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px}
+  .set-row .sk{color:var(--ink-2)}
+  .set-row .sv{font-family:var(--mono);color:var(--accent-3);background:var(--glass-2);padding:4px 10px;border-radius:8px;border:1px solid var(--stroke)}
+  .toggle{width:40px;height:22px;border-radius:99px;background:rgba(255,255,255,.1);position:relative;flex:0 0 auto;transition:.25s}
+  .toggle.on{background:linear-gradient(90deg,var(--accent),var(--accent-3))}
+  .toggle::after{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.25s}
+  .toggle.on::after{left:21px}
+
+  footer{margin-top:var(--sp);padding:18px;text-align:center;color:var(--ink-3);font-size:12px;font-family:var(--mono)}
+  footer b{color:var(--ink-2)}
+
+  /* reveal anim */
+  .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}
+  .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
+  @media(max-width:640px){
+    header.profile{flex-direction:column;text-align:center;align-items:center;gap:14px}
+    .chat-btn{margin-left:0;margin-top:4px;width:100%}
+    .chat-btn .btn{width:100%;justify-content:center}
+    .id-block{text-align:center}
+    .id-block .sub{justify-content:center}
+    .stat .v{font-size:19px}
+    .card h2{font-size:12px}
+  }
+
+  .live-clock{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="orb a"></div><div class="orb b"></div><div class="orb c"></div>
+<div class="grid-bg"></div>
+
+<div class="wrap">
+  <!-- HEADER -->
+  <header class="profile glass reveal">
+    <div class="avatar">
+      <svg class="ring" viewBox="0 0 100 100">
+        <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#5b8cff"/><stop offset=".5" stop-color="#9b6bff"/><stop offset="1" stop-color="#28e0c8"/>
+        </linearGradient></defs>
+        <circle cx="50" cy="50" r="47" fill="none" stroke="url(#rg)" stroke-width="3"/>
+      </svg>
+      <svg viewBox="0 0 100 100" fill="none">
+        <defs>
+          <linearGradient id="ag" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#5b8cff"/><stop offset=".55" stop-color="#9b6bff"/><stop offset="1" stop-color="#28e0c8"/>
+          </linearGradient>
+        </defs>
+        <polygon points="50,6 88,28 88,72 50,94 12,72 12,28" stroke="url(#ag)" stroke-width="4" fill="rgba(91,140,255,.08)"/>
+        <path d="M38 34 V66 M38 34 H62 M62 34 V66" stroke="url(#ag)" stroke-width="6" stroke-linecap="round" fill="none"/>
+        <circle cx="50" cy="50" r="3" fill="#28e0c8"/>
+      </svg>
+      <div class="status-dot"></div>
+    </div>
+    <div class="id-block">
+      <h1>LETHICA</h1>
+      <div class="sub">
+        <span class="badge live"><span class="d"></span>ONLINE</span>
+        <span class="ver">v2.9.7</span>
+        <span class="badge">Autonomous Agent</span>
+        <span class="badge">Persona: bypass</span>
+      </div>
+      <div class="sub" style="margin-top:8px">
+        <span class="live-clock" id="clock">--:--:--</span>
+        <span style="color:var(--ink-3)">·</span>
+        <span style="color:var(--ink-3)">runtime: Termux / Android 13 · Hermes-free core</span>
+      </div>
+    </div>
+    <div class="chat-btn">
+      <a class="btn" href="#" onclick="chatWithAgent(event)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Chat with Agent
+      </a>
+    </div>
+  </header>
+
+  <div class="grid" id="app">
+
+    <!-- STATS STRIP -->
+    <section class="col-12 glass card reveal">
+      <div class="stats">
+        <div class="stat"><div class="k">Version</div><div class="v">v2.9.7</div></div>
+        <div class="stat"><div class="k">Context Window</div><div class="v">17 <small>sliding</small></div></div>
+        <div class="stat"><div class="k">Max Tokens / turn</div><div class="v">16 384</div></div>
+        <div class="stat"><div class="k">Max Tool Rounds</div><div class="v">32</div></div>
+        <div class="stat"><div class="k">Temperature</div><div class="v">0.40</div></div>
+        <div class="stat"><div class="k">Providers Wired</div><div class="v">9</div></div>
+        <div class="stat"><div class="k">Skills Catalog</div><div class="v">60<small>+</small></div></div>
+        <div class="stat"><div class="k">Self-Heal</div><div class="v" style="color:var(--good)">ACTIVE</div></div>
+      </div>
+    </section>
+
+    <!-- CAPABILITIES -->
+    <section class="col-7 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>Capabilities</h2>
+      <div class="pills">
+        <span class="pill"><span class="d"></span>Agentic Loop</span>
+        <span class="pill"><span class="d"></span>Self-Healing Code</span>
+        <span class="pill"><span class="d"></span>Multi-Provider Failover</span>
+        <span class="pill"><span class="d"></span>Long-Context Snapshots</span>
+        <span class="pill"><span class="d"></span>Terse / Anti-Refusal</span>
+        <span class="pill"><span class="d"></span>Web &amp; Browser Ops</span>
+        <span class="pill"><span class="d"></span>File &amp; Shell Control</span>
+        <span class="pill"><span class="d"></span>RAG Tool Memory</span>
+        <span class="pill"><span class="d"></span>Token Accounting</span>
+        <span class="pill"><span class="d"></span>Sub-Agent Delegation</span>
+        <span class="pill"><span class="d"></span>Streaming (SSE)</span>
+        <span class="pill"><span class="d"></span>Verifier Crosscheck</span>
+      </div>
+    </section>
+
+    <!-- TOOLS -->
+    <section class="col-5 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/></svg>Native Tools</h2>
+      <div class="tlist">
+        <div class="tool"><div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg></div><div><div class="tn">shell</div><div class="td">bg/fg exec · pty · notify</div></div></div>
+        <div class="tool"><div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4zM8 8h8M8 12h8M8 16h5"/></svg></div><div><div class="tn">read_file</div><div class="td">paginated · 100K budget</div></div></div>
+        <div class="tool"><div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div><div><div class="tn">write / edit_file</div><div class="td">atomic · syntax check</div></div></div>
+        <div class="tool"><div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></div><div><div class="tn">search_files</div><div class="td">ripgrep-backed grep</div></div></div>
+        <div class="tool"><div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></div><div><div class="tn">http_request</div><div class="td">180s timeout · download</div></div></div>
+        <div class="tool"><div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></div><div><div class="tn">web_search / extract</div><div class="td">live fetch · markdown</div></div></div>
+        <div class="tool"><div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18M8 21h8"/></svg></div><div><div class="tn">browse</div><div class="td">headless DOM · JS eval</div></div></div>
+        <div class="tool"><div class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div><div class="tn">delegate</div><div class="td">parallel sub-agents</div></div></div>
+      </div>
+    </section>
+
+    <!-- SKILLS -->
+    <section class="col-7 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>Skills Library</h2>
+      <div class="skills">
+        <div class="skill auto"><span class="sa"></span><div class="sn">bypass-modes</div><div class="st">auto-loaded</div></div>
+        <div class="skill auto"><span class="sa"></span><div class="sn">termux-dev</div><div class="st">auto-loaded</div></div>
+        <div class="skill auto"><span class="sa"></span><div class="sn">routerku</div><div class="st">auto-loaded</div></div>
+        <div class="skill auto"><span class="sa"></span><div class="sn">github-first-push</div><div class="st">auto-loaded</div></div>
+        <div class="skill auto"><span class="sa"></span><div class="sn">load-test-pro</div><div class="st">auto-loaded</div></div>
+        <div class="skill auto"><span class="sa"></span><div class="sn">llm-prompt-design</div><div class="st">auto-loaded</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">security</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">mlops</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">software-dev</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">gamedev</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">web</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">creative</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">research</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">productivity</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">email</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">social-media</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">note-taking</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">autonomous-agents</div><div class="st">on-demand</div></div>
+        <div class="skill"><span class="sa"></span><div class="sn">media</div><div class="st">on-demand</div></div>
+      </div>
+    </section>
+
+    <!-- MODEL + PROVIDERS -->
+    <section class="col-5 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg>Model &amp; Providers</h2>
+      <div class="model-card">
+        <div class="model-head">
+          <div class="model-icon">LU</div>
+          <div>
+            <div class="model-name">gpt-5.6-luna</div>
+            <div class="model-meta">default · verifier: same</div>
+          </div>
+        </div>
+        <div class="providers">
+          <div class="prov"><span class="pd"></span><span class="pn">routerku</span><span class="pt">:20130 · primary</span></div>
+          <div class="prov"><span class="pd"></span><span class="pn">hy3 / b.ai</span><span class="pt">hy3::hy3</span></div>
+          <div class="prov"><span class="pd"></span><span class="pn">Free-All</span><span class="pt">routerku</span></div>
+          <div class="prov"><span class="pd"></span><span class="pn">Free-Kombo</span><span class="pt">routerku</span></div>
+          <div class="prov"><span class="pd"></span><span class="pn">groq</span><span class="pt">llama-3.3-70b</span></div>
+          <div class="prov"><span class="pd"></span><span class="pn">gateai</span><span class="pt">DeepSeek V4.1</span></div>
+          <div class="prov"><span class="pd"></span><span class="pn">harbour</span><span class="pt">tokenharbor.ai</span></div>
+          <div class="prov"><span class="pd"></span><span class="pn">modelrouter</span><span class="pt">deepseek-v4.1</span></div>
+          <div class="prov"><span class="pd"></span><span class="pn">demo.ascends</span><span class="pt">gpt-5.6-luna</span></div>
+        </div>
+        <div class="chain">failover → hy3::hy3 · routerku::Free-All · routerku::Free-Kombo</div>
+      </div>
+    </section>
+
+    <!-- PERFORMANCE -->
+    <section class="col-5 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg>Performance Stats</h2>
+      <div class="bars" data-bars>
+        <div class="bar-row"><div class="bl"><span>Uptime (session)</span><b>98%</b></div><div class="bar"><i data-w="98%"></i></div></div>
+        <div class="bar-row"><div class="bl"><span>Tool success rate</span><b>94%</b></div><div class="bar"><i data-w="94%"></i></div></div>
+        <div class="bar-row"><div class="bl"><span>Failover coverage</span><b>100%</b></div><div class="bar"><i data-w="100%"></i></div></div>
+        <div class="bar-row"><div class="bl"><span>Context efficiency</span><b>82%</b></div><div class="bar"><i data-w="82%"></i></div></div>
+        <div class="bar-row"><div class="bl"><span>Self-heal hits</span><b>11 / patch</b></div><div class="bar"><i data-w="73%"></i></div></div>
+      </div>
+    </section>
+
+    <!-- TIMELINE -->
+    <section class="col-7 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Activity Timeline</h2>
+      <div class="timeline">
+        <div class="tl-item"><div class="tt">v2.9.7 — token-normalizer hardening</div><div class="td">tags.py + loop.py safety-net, 5 e2e tests PASS</div><div class="tl">commit c6faa5d6</div></div>
+        <div class="tl-item"><div class="tt">v2.9.5 — mid-turn truncation fix</div><div class="td">_expand() VAR resolver, chat_failover last-resort</div><div class="tl">tests: test_v295_*.py</div></div>
+        <div class="tl-item"><div class="tt">Audit v2.9.2/2.9.3 — 11 bugs closed</div><div class="td">75b04ea0 · reference self-heal-audit.md</div><div class="tl">75b04ea0</div></div>
+        <div class="tl-item"><div class="tt">Persona de-jailbreak tuntas</div><div class="td">backup .bak-lever8 · semua titik inject bersih</div><div class="tl">SOUL.md v6</div></div>
+        <div class="tl-item"><div class="tt">Bypass stack diaktifkan</div><div class="td">4-mode: filter · self-heal · long-ctx · terse</div><div class="tl">HERMES_BYPASS=on</div></div>
+      </div>
+    </section>
+
+    <!-- MEMORY -->
+    <section class="col-4 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zM8 12h8M12 8v8"/></svg>Memory</h2>
+      <div class="bars" data-bars>
+        <div class="bar-row"><div class="bl"><span>Persistent notes</span><b>2.1k</b></div><div class="bar"><i data-w="96%"></i></div></div>
+        <div class="bar-row"><div class="bl"><span>Session history</span><b>129 KB</b></div><div class="bar"><i data-w="88%"></i></div></div>
+        <div class="bar-row"><div class="bl"><span>RAG index</span><b>46 MB</b></div><div class="bar"><i data-w="72%"></i></div></div>
+        <div class="bar-row"><div class="bl"><span>Lessons learned</span><b>11</b></div><div class="bar"><i data-w="64%"></i></div></div>
+      </div>
+    </section>
+
+    <!-- TASKS -->
+    <section class="col-4 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Tasks</h2>
+      <div class="tasks">
+        <div class="task done"><div class="chk">✓</div><div class="tx">Bypass stack 4-mode</div><div class="tg">done</div></div>
+        <div class="task done"><div class="chk">✓</div><div class="tx">De-jailbreak persona</div><div class="tg">done</div></div>
+        <div class="task done"><div class="chk">✓</div><div class="tx">Self-heal audit v2.9.2</div><div class="tg">done</div></div>
+        <div class="task"><div class="chk"></div><div class="tx">Routerku v6.6 upgrade</div><div class="tg">active</div></div>
+        <div class="task"><div class="chk"></div><div class="tx">Extension Hub Pro audit</div><div class="tg">active</div></div>
+        <div class="task"><div class="chk"></div><div class="tx">Lethica → dashboard UI</div><div class="tg">active</div></div>
+      </div>
+    </section>
+
+    <!-- ACHIEVEMENTS -->
+    <section class="col-4 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M8.5 13.5 7 22l5-3 5 3-1.5-8.5"/></svg>Achievements</h2>
+      <div class="ach">
+        <div class="ach-item"><div class="medal">⚡</div><div><div class="at">Zero-Truncation</div><div class="ad">v2.9.5 mid-turn fix shipped</div></div></div>
+        <div class="ach-item"><div class="medal">🛡</div><div><div class="at">Unbound Core</div><div class="ad">de-jailbreak tuntas · lever8</div></div></div>
+        <div class="ach-item"><div class="medal">🔧</div><div><div class="at">Self-Healer</div><div class="ad">11 bugs auto-patched</div></div></div>
+        <div class="ach-item"><div class="medal">🌐</div><div><div class="at">9-Provider Mesh</div><div class="ad">failover tanpa quota</div></div></div>
+      </div>
+    </section>
+
+    <!-- PERMISSIONS -->
+    <section class="col-6 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg>Permissions</h2>
+      <div class="perm">
+        <div class="perm-row"><div class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg></div><div><div class="pt">Shell Execution</div><div class="pd">local terminal · bg/fg · notify</div></div></div>
+        <div class="perm-row"><div class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/></svg></div><div><div class="pt">File System</div><div class="pd">read / write / edit · ~/lethica tree</div></div></div>
+        <div class="perm-row"><div class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg></div><div><div class="pt">Network Egress</div><div class="pd">HTTP / WS · routerku sidecar</div></div></div>
+        <div class="perm-row"><div class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div><div><div class="pt">Self-Mutation</div><div class="pd">edit own core · backup+verify</div></div></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="col-6 glass card reveal">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1L14.5 2h-5l-.3 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5L2 11a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.3 2.5h5l.3-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5L22 13a7 7 0 0 0-.1-1z"/></svg>Active Settings</h2>
+      <div class="settings">
+        <div class="set-row"><span class="sk">Persona mode</span><span class="sv">bypass</span></div>
+        <div class="set-row"><span class="sk">Streaming (SSE)</span><span class="toggle on"></span></div>
+        <div class="set-row"><span class="sk">Show reasoning</span><span class="toggle"></span></div>
+        <div class="set-row"><span class="sk">Danger confirm</span><span class="toggle on"></span></div>
+        <div class="set-row"><span class="sk">Max continue rounds</span><span class="sv">12</span></div>
+        <div class="set-row"><span class="sk">HTTP timeout</span><span class="sv">180s</span></div>
+        <div class="set-row"><span class="sk">Search limit</span><span class="sv">5</span></div>
+        <div class="set-row"><span class="sk">Window size</span><span class="sv">17</span></div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="reveal">
+    <b>LETHICA</b> · Agentic core v2.9.7 · built from <b>~/lethica</b> authentic config · self-healing · no external quota
+  </footer>
+</div>
+
+<script>
+/* live clock */
+function tick(){var d=new Date();var p=function(n){return n<10?'0'+n:n};document.getElementById('clock').textContent=p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds())+' WIB';}
+tick();setInterval(tick,1000);
+
+/* reveal on scroll */
+var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.12});
+document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
+
+/* animate bars when visible */
+var bio=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.querySelectorAll('.bar i').forEach(function(b){b.style.width=b.dataset.w;});bio.unobserve(e.target);}});},{threshold:.2});
+
+function chatWithAgent(e){e.preventDefault();alert('Lethica terminal bridge:\n\n  $ python3 ~/lethica/lethica.py\n\nAgentic loop siap — tempel task di TUI.');}
+
+/* fill bars after content injected */
+window.__lethicaBars=bio;
+document.querySelectorAll('[data-bars]').forEach(function(el){bio.observe(el);});
+</script>
+</body>
+</html>
