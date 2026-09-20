@@ -10,7 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core import memory as M
 
 MEM_DIR = M.config.MEMORY_DIR
-for f in ("memories.json", "embeddings.json", "relations.json", "observability.json"):
+for f in ("memories.json", "embeddings.json", "relations.json", "observability.json",
+          "memories.db", "memories.db-wal", "memories.db-shm"):  # v3.7.1: store SQLite+WAL
     p = os.path.join(MEM_DIR, f)
     if os.path.isfile(p):
         os.remove(p)

@@ -1,0 +1,8 @@
+# Lethica runtime deps (core TUI + HTTP stack)
+# cek versi terpasang: pip show rich curl_cffi
+rich>=13.0
+curl_cffi>=0.7        # browser-impersonation HTTP (opsional; fallback urllib otomatis)
+
+# Bridge Telegram (python3 lethica_bridge.py) — install terpisah kalau pakai:
+#   pip install python-telegram-bot>=21
+# Core agent sengaja ZERO heavy deps (urllib + sqlite3 stdlib) — Termux constraint.

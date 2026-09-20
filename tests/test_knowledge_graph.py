@@ -46,9 +46,10 @@ def check(name, cond, detail=""):
 
 def reset_all():
     G.reset(confirm=True)
-    for f in (M.MEM_FILE, M.REL_FILE, M.OBS_FILE, M.EMB_FILE):
+    for f in (M.MEM_FILE, M.REL_FILE, M.OBS_FILE, M.EMB_FILE,
+              M._db_path(), M._db_path() + "-wal", M._db_path() + "-shm"):
         if os.path.isfile(f):
-            os.remove(f)
+            os.remove(f)  # v3.7.1: memory store = SQLite (WAL files ikut)
 
 
 def build_graph_a():

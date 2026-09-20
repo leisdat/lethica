@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lethica"
+dynamic = ["version"]
+description = "Lethica — personal autonomous agent: semantic memory, knowledge graph, skill evolution, native function calling."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"          # tomllib stdlib
+authors = [{ name = "letticha" }]
+dependencies = [
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+http = ["curl_cffi>=0.7"]           # TLS/JA3 impersonation; urllib fallback otomatis
+telegram = ["python-telegram-bot>=21"]
+
+[project.scripts]
+lethica = "lethica:main"
+
+[tool.setuptools]
+py-modules = ["lethica"]
+
+[tool.setuptools.packages.find]
+include = ["core*"]
+
+[tool.setuptools.dynamic]
+version = { file = [".lethica_version"] }

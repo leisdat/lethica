@@ -120,23 +120,44 @@ def _fmt_tool_results(out, limit=1800):
 
 def _run_agent_turn(messages, model, user_text, progress_cb=None):
     """Sinkron agent loop. Return (final_text, used) atau (None, None).
-    progress_cb(round_idx, kind, info) untuk status ke TG."""
+    progress_cb(round_idx, kind, info) untuk status ke TG.
+    v3.7: pakai core.tooldef schema (native FC kalau provider dukung, auto-degrade)
+    + dispatcher tervalidasi lethica.tags — TOOL_TAG_RE manual dibuang."""
+    from core import tooldef as _tooldef
     messages.append({"role": "user", "content": user_text})
     final_text = None
     used = None
     last_reply = None
     rounds = max(1, int(lethica.MAX_TOOL_ROUNDS))
+    tools_payload = _tooldef.openai_tools() if getattr(lethica.config, "NATIVE_FC", False) else None
     for i in range(rounds):
         if progress_cb:
             progress_cb(i, "thinking", None)
         reply, used = CLIENT.chat_failover(
             model, messages, lethica.FAILOVER_CHAIN,
             temperature=lethica.TEMPERATURE, max_tokens=lethica.MAX_TOKENS,
-            timeout=lethica.HTTP_TIMEOUT)
+            timeout=lethica.HTTP_TIMEOUT, tools=tools_payload)
         if reply is None:
             return None, None
+        if getattr(CLIENT, "tools_rejected", False) and tools_payload:
+            tools_payload = None
         reply = lethica.terse_filter(reply)
         last_reply = reply
+        # ── jalur native FC ──
+        native_calls = getattr(CLIENT, "last_tool_calls", None)
+        if native_calls:
+            amsg = {"role": "assistant", "tool_calls": native_calls}
+            if reply and reply != "(empty reply)":
+                amsg["content"] = reply
+            messages.append(amsg)
+            for tc_id, label, out_text in lethica.tags.dispatch_calls_list(
+                    native_calls, lethica.SELF_PATH):
+                messages.append({"role": "tool", "tool_call_id": tc_id,
+                                 "name": label, "content": _fmt_tool_results(str(out_text), 3000)})
+            if progress_cb:
+                progress_cb(i, "tool", used)
+            continue
+        # ── jalur tag legacy (regex + salvage tervalidasi) ──
         messages.append({"role": "assistant", "content": reply})
         out = lethica.dispatch(reply, lethica.SELF_PATH)
         if not out:
@@ -145,8 +166,8 @@ def _run_agent_turn(messages, model, user_text, progress_cb=None):
         if progress_cb:
             progress_cb(i, "tool", used)
         messages.append({"role": "user", "content": (
-            "Tool results (lethica sandbox). Lanjut atau finalkan.\n\n<tool_response>\n"
-            + _fmt_tool_results(out) + "\n</tool_response>"
+            "Tool results (lethica sandbox). Lanjut atau finalkan.\n\n"
+            "<tool_response>\n" + _fmt_tool_results(out) + "\n</tool_response>"
         )})
     else:
         # v2.9.2 fix: dulu ambil messages[-1] (= tool_response mentah, bocor ke chat).

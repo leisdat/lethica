@@ -1,4 +1,4 @@
-# core/memory.py — v3.5.0 Semantic Long-Term Memory
+# core/memory.py — v3.5.0 Semantic Long-Term Memory (storage v3.7.1: SQLite)
 #
 # Evolusi dari lexical recall (v3.1 experience.recall) menjadi:
 #   SEMANTIC + STRUCTURED + LONG-TERM MEMORY
@@ -6,7 +6,8 @@
 # Prinsip (dari mission):
 #   - TIDAK rebuild Lethica. Reuse storage/helper existing (experience.py, config.py).
 #   - TIDAK hapus Experience Memory. experience.* tetap jalan & dipanggil berdampingan.
-#   - TIDAK introduce infra berat. Storage = JSON lokal (memory/memories.json).
+#   - TIDAK introduce infra berat. Storage v3.7.1: SQLite (pola FTS5 rag.py,
+#     stdlib, zero-dep) — memories.json di-import otomatis sekali saat first run.
 #   - Embedding OPTIONAL. Default OFF → semantic_search fallback ke lexical.
 #   - Deterministic fallback selalu ada.
 #
@@ -23,6 +24,7 @@ import re
 import json
 import time
 import math
+import sqlite3
 import hashlib
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -138,12 +140,189 @@ def _save(path, data):
     os.replace(tmp, path)
 
 
+# ── v3.7.1 storage backend: SQLite (pola rag.py — stdlib, zero-dep) ──
+# MEM_FILE tetap sumber nama: DB = <MEM_FILE tanpa .json>.db → redirect test
+# (M.MEM_FILE = temp) otomatis ikut tanpa ubah test. Tabel:
+#   idx AUTOINCREMENT = urutan store historis (hybrid_search tak berubah perilaku)
+#   id UNIQUE         → get/update/feedback O(log n), bukan scan penuh
+#   kolom query-able  → archived/type/project/scope; body = JSON utuh (field drift-proof)
+def _db_path():
+    return (MEM_FILE[:-5] if MEM_FILE.endswith(".json") else MEM_FILE) + ".db"
+
+
+_SCHEMA = [
+    """CREATE TABLE IF NOT EXISTS memories(
+        idx INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT UNIQUE, type TEXT, project_id TEXT, scope TEXT,
+        archived INTEGER DEFAULT 0, ts TEXT, body TEXT NOT NULL)""",
+    "CREATE INDEX IF NOT EXISTS mem_type ON memories(type)",
+    "CREATE INDEX IF NOT EXISTS mem_proj ON memories(project_id)",
+    # FTS5 external-content (pola rag.py): sinkron via trigger, index gak nyimpan body
+    """CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(
+        body, content='memories', content_rowid='idx',
+        tokenize='unicode61 remove_diacritics 2')""",
+    """CREATE TRIGGER IF NOT EXISTS mem_ai AFTER INSERT ON memories BEGIN
+        INSERT INTO mem_fts(rowid, body) VALUES (new.idx, new.body); END""",
+    """CREATE TRIGGER IF NOT EXISTS mem_ad AFTER DELETE ON memories BEGIN
+        INSERT INTO mem_fts(mem_fts, rowid, body) VALUES('delete', old.idx, old.body); END""",
+    """CREATE TRIGGER IF NOT EXISTS mem_au AFTER UPDATE ON memories BEGIN
+        INSERT INTO mem_fts(mem_fts, rowid, body) VALUES('delete', old.idx, old.body);
+        INSERT INTO mem_fts(rowid, body) VALUES (new.idx, new.body); END""",
+]
+
+
+_CONNS = {}        # path → conn (Termux: connect+schema-init ~5ms → dominant di loop)
+_INITED = set()    # path yang sudah dibuat schema + dicek legacy-import
+_LAST = {}         # path → {id: body} hasil save terakhir (skip SELECT-all)
+
+
+def _mem_db():
+    path = _db_path()
+    conn = _CONNS.get(path)
+    if conn is not None and path in _INITED:
+        return conn
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    if conn is None:
+        conn = _mem_conn(path)
+    if path not in _INITED:
+        for sql in _SCHEMA:
+            conn.execute(sql)
+        _db_import_legacy(path, conn)
+        _INITED.add(path)
+    _CONNS[path] = conn
+    return conn
+
+
+def _mem_conn(path):
+    """Koneksi + pragma: WAL + synchronous=NORMAL.
+    Termux flash: fsync per-commit ~90ms → tanpa ini feedback_batch(80 id)
+    naik 0.04s→0.10s/call dan menjebol threshold v32 (0.45s). WAL bikin commit
+    = append WAL (NORMAL hanya fsync saat checkpoint) — atomicitas tetap."""
+    conn = sqlite3.connect(path, check_same_thread=False)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.Error:
+        pass  # filesystem tanpa dukungan WAL (exFAT) → default rollback journal
+    return conn
+
+
+def _db_import_legacy(path, conn):
+    """Sekali: memories.json lama (≤2000) → DB, file di-rename .migrated."""
+    if os.path.exists(path) and conn.execute("SELECT 1 FROM memories LIMIT 1").fetchone():
+        return
+    if not os.path.isfile(MEM_FILE):
+        return
+    try:
+        legacy = _load(MEM_FILE, [])
+    except Exception:
+        legacy = []
+    if not isinstance(legacy, list) or not legacy:
+        return
+    for m in legacy:
+        conn.execute(
+            "INSERT OR IGNORE INTO memories(id,type,project_id,scope,archived,ts,body) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (m.get("id"), m.get("type"), m.get("project_id"), m.get("scope"),
+             1 if m.get("archived") else 0, m.get("timestamp", ""),
+             json.dumps(m, ensure_ascii=False)))
+    conn.commit()
+    try:
+        os.replace(MEM_FILE, MEM_FILE + ".migrated")
+    except OSError:
+        pass
+
+
+def close_backend():
+    """Tutup + buang cache koneksi. WAJIB dipanggil test kalau file DB dihapus
+    di tengah proses (klien cached menunjuk inode lama → view basi)."""
+    for c in _CONNS.values():
+        try:
+            c.close()
+        except Exception:
+            pass
+    _CONNS.clear()
+    _INITED.clear()
+    _LAST.clear()
+
+
+def _row(m):
+    return (m.get("id"), m.get("type"), m.get("project_id"), m.get("scope"),
+            1 if m.get("archived") else 0, m.get("timestamp", ""),
+            json.dumps(m, ensure_ascii=False))
+
+
 def _memories():
-    return _load(MEM_FILE, [])
+    """Snapshot list memori (urutan store historis). Kontrak lama dipertahankan:
+    panggil _save_memories(lst) setelah mutasi — call-site 24x tak berubah."""
+    try:
+        conn = _mem_db()
+    except Exception:
+        return _load(MEM_FILE, [])   # DB korup/unwritable → fallback JSON lama
+    rows = conn.execute("SELECT body FROM memories ORDER BY idx").fetchall()
+    out = []
+    for (body,) in rows:
+        try:
+            out.append(json.loads(body))
+        except Exception:
+            continue
+    return out
 
 
 def _save_memories(lst):
-    _save(MEM_FILE, lst[-MAX_MEM:])
+    """Full-list write (kontrak lama: cap MAX_MEM, urutan = urutan masuk).
+    v3.7.1 perf: UPSERT + skip-if-unchanged — trigger FTS hanya kena baris yang
+    isinya beneran berubah. Rewrite penuh (DELETE+INSERT) membuat setiap
+    feedback_batch menyapu 90 delete+insert index → threshold v32 jebol.
+    _LAST cache in-process: save berikutnya bandingkan dgn memori sendiri,
+    SELECT-all body dihindari di steady state (hemat ~10-20ms/save Termux)."""
+    keep = lst[-MAX_MEM:]
+    conn = _mem_db()
+    path = _db_path()
+    with conn:
+        if _LAST.get(path) is not None:
+            stored = _LAST[path]
+        else:
+            stored = dict(conn.execute("SELECT id, body FROM memories").fetchall())
+        new_cache = {}
+        new_ids = set()
+        for m in keep:
+            mid, body = m.get("id"), json.dumps(m, ensure_ascii=False)
+            if mid is not None:
+                new_ids.add(mid)
+                new_cache[mid] = body
+            if stored.get(mid) == body:
+                continue  # unchanged → nol write, nol trigger
+            if mid in stored:
+                conn.execute(
+                    "UPDATE memories SET type=?,project_id=?,scope=?,archived=?,"
+                    "ts=?,body=? WHERE id=?",
+                    (m.get("type"), m.get("project_id"), m.get("scope"),
+                     1 if m.get("archived") else 0, m.get("timestamp", ""), body, mid))
+            else:
+                conn.execute(
+                    "INSERT OR IGNORE INTO memories"
+                    "(id,type,project_id,scope,archived,ts,body) VALUES (?,?,?,?,?,?,?)",
+                    _row(m))
+        # id yang hilang dari list (trim MAX_MEM / purge) → hapus; id None tak pernah di-insert
+        gone = [i for i in stored if i not in new_ids and i is not None]
+        conn.executemany("DELETE FROM memories WHERE id=?", ((i,) for i in gone))
+        _LAST[path] = new_cache
+
+
+def find_ids_by_fts(query, limit=50):
+    """Prefilter FTS5: memori yang memuat kata kunci (dulu mustahil tanpa scan)."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    safe = '"' + q.replace('"', '""') + '"'  # phrase-quoted: user input bukan syntax
+    try:
+        rows = _mem_db().execute(
+            "SELECT m.id FROM memories m JOIN mem_fts f ON m.idx = f.rowid "
+            "WHERE mem_fts MATCH ? ORDER BY rank LIMIT ?", (safe, limit)).fetchall()
+        return [r[0] for r in rows]
+    except Exception:
+        return []
 
 
 def _relations():
@@ -266,6 +445,16 @@ def store(memory, dedupe=True):
     memory["confidence"] = conf
     memory["confidence_score"] = cscore
     memory["quality"] = "CONFIRMED" if memory.get("source") == "EXECUTION_EVIDENCE" else "UNVERIFIED"
+    # v3.7.1 FIX bug laten v3.5: id = m{ts_ms}-{len saat MAKE} → burst create-then-store
+    # menghasilkan id SAMA (JSON lama nyimpen diem-diem → get()/feedback orphan; SQLite
+    # UNIQUE nolak baris → data hilang). Re-ID deterministik sampai unik.
+    existing = {m.get("id") for m in store_list}
+    if memory.get("id") in existing or memory.get("id") is None:
+        base = memory.get("id") or f"m{int(time.time()*1000)}"
+        n = 0
+        while f"{base}-{n}" in existing:
+            n += 1
+        memory["id"] = f"{base}-{n}"
     store_list.append(memory)
     _save_memories(store_list)
     obs_inc("memory_stores")
@@ -576,11 +765,14 @@ def retrieve_for_plan(goal, project_id=None, skill_id=None, strategy_id=None, ta
 
 # ── get / update / link / archive / feedback / conflict (Phase 29) ──
 def get(memory_id):
-    for m in _memories():
+    lst = _memories()
+    for m in lst:
         if m["id"] == memory_id:
             m["access_count"] = m.get("access_count", 0) + 1
             m["last_accessed"] = _now()
-            _save_memories(_memories())
+            # v3.7.1: bug laten pola link() lama — _save_memories(_memories())
+            # reload fresh & buang edit in-place → access_count tak pernah tersimpan.
+            _save_memories(lst)
             return m
     return None
 
