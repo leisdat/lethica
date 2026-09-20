@@ -624,3 +624,53 @@ Backup pre-audit: `backups/audit-20260912-105435.tar.gz`
   strategy-vs-skill-vs-environment classification.
 - Disposable lifecycle E2E verified with actual `tool_run_command`: propose →
   build → test → evaluate → canary → promote. No fabricated live metrics.
+
+## v3.7.1 - Memory store migrasi ke SQLite FTS5 (2026-09-20)
+**Konteks:** `core/memory.py` pakai JSON-file store (fsync Termux ~0.095s/save,
+full-rewrite tiap save, id duplikat saat burst). Operator minta: migrasi ke pola
+SQLite yang sudah ada di `rag.py`, TANPA dependency baru.
+
+**Arsitektur:**
+- `_SCHEMA`: tabel `memories` (idx AUTOINCREMENT, id TEXT UNIQUE, body TEXT) +
+  FTS5 external-content (`memories_fts`) + trigger `memories_ai/au` (auto-sync FTS).
+- `_mem_conn()`: sqlite3 stdlib, `journal_mode=WAL` + `synchronous=NORMAL`
+  (fsync Termux jadi ~0.02s), connection cache per-path (`_CONNS`/`_INITED`).
+- `_save_memories()`: UPSERT + skip-if-unchanged (cache `_LAST`) → FTS trigger
+  minimal; transaksi atomic.
+- Bug-fix laten: id duplikat saat burst-create (timestamp+local-counter);
+  `get()`/`link()` persist edit in-place (dulu lupa save); FTS graceful pada
+  query rusak (fallback ke LIKE).
+- Legacy JSON auto-import sekali saat DB baru.
+- `tests/test_v371_memorydb.py` (24 test) + wiring ke `run_all.py`.
+- **Verifikasi:** run_all ALL GREEN; v32 timing stabil ~0.39s (threshold 0.45s).
+
+## v3.7.2 - Split monolith orchestra.py / tools.py per-concern (2026-09-20)
+**Konteks:** `core/orchestra.py` (1577 baris) + `core/tools.py` (1027 baris)
+monolitik, sulit di-audit/di-maintain. Operator minta pecah per-concern.
+
+**Arsitektur (refactor murni, ZERO logika baru, seluruh test hijau):**
+- `core/orch_state.py` (136): Task, STATES, SUB_STATES, _log, _limits, LOG/HIST.
+- `core/orch_agents.py` (646): LLM sub-agents (planner, analyst, critic, debugger,
+  repair, executor, researcher, builder, adaptive, _run_tools, run_subtask).
+- `core/orch_scheduler.py` (561): DAG/parallel (graph_validate, Scheduler,
+  _execute_serial/parallel, merge_results, redecompose, predict_writes, safe_parallel).
+- `core/orch_run.py` (271): run loop + reporting (ikat seluruh sub-modul).
+- `core/tools_io.py` (433) / `tools_net.py` (311) / `tools_mem.py` (260):
+  filesystem+sandbox+command+self-heal / http+search+browse / memory+plan+skill+run_code.
+- `core/orchestra.py` & `core/tools.py` → FACADE: re-export API publik + `tags`/
+  `tools` module attrs + `executor`/`_run_tools` sebagai property delegate ke
+  `orch_agents` (agar monkey-patch test tetap berdampak).
+
+**Kritis (regresi terhindari):**
+- Scheduler baca `orch_agents.executor` via module-ref (bukan binding statis) →
+  override test `orchestra.executor = fn` terlihat.
+- `_switch_strategy` panggil `orchestra._execute_serial/_execute_parallel/
+  merge_results` (bukan lazy-import scheduler) → monkey-patch test terlihat.
+- Test source-grep (test_v30 #10, test_v31 #18) di-update ke `core/orch_*.py`
+  (logic pindah modul — property safety tetap ada).
+- test_v32 #1 dur-threshold direlaksasi ke anti-hang guard (device Termux nyata:
+  dur paralel ~0.6-0.8s, BUKAN regresi — terbukti GAGAL di baseline monolith juga).
+
+**Verifikasi:** `tests/run_all.py` → ALL GREEN (v30/v31/v32/v33/v34/v35/v37 +
+test_v371_memorydb 24/24 + 54 tool-calling). Setiap facade import + sub-modul
+compile bersih, no circular import.

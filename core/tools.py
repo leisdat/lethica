@@ -33,6 +33,9 @@ from core import config, stats, cache
 
 console = None  # injected
 
+# convenience alias (tags.py memakai *_TAG_RE spesifik; ini untuk kompat)
+TAG_RE = None
+
 EXEC_TAG_RE = re.compile(
     r'<invoke\s+name="antml:computer:execute_command">\s*<parameter\s+name="command">(.*?)</parameter>\s*</invoke>',
     re.DOTALL | re.IGNORECASE,

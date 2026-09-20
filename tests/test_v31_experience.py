@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # tests/test_v31_experience.py — deterministic suite v3.1 (LLM via stub).
 # Fitur 1-14 + regresi. Jalankan: python3 tests/test_v31_experience.py
-import os, sys, json, time, tempfile
+import os, sys, json, time, tempfile, glob as _glob
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 fails = 0
 def ok(cond, msg):
@@ -193,11 +193,13 @@ ok("memory_hit_rate" in mt and "failure_patterns" in mt and "avg_retries" in mt,
 ok("memory_sample_warning" in mt, "17 kejujuran sampel kecil (anti-klaim palsu)")
 
 # ── 18: loop safety masih aktif ──────────────────────────────────────
-src = open(os.path.join(os.path.dirname(__file__), "..", "core", "orchestra.py")).read()
-ok(all(k in src for k in ("max_retries", "max_repair_attempts", "max_tool_calls",
+# v3.7.2: limit ada di orch_state.py / orch_scheduler.py, protection di orch_scheduler.py.
+_src = "\n".join(open(f, encoding="utf-8", errors="replace").read()
+                  for f in _glob.glob(os.path.join(os.path.dirname(__file__), "..", "core", "orch_*.py")))
+ok(all(k in _src for k in ("max_retries", "max_repair_attempts", "max_tool_calls",
                           "max_agent_steps", "task.limits[\"timeout\"]")),
    "18 semua limit v3.0 tetap dirujuk")
-ok("task.graph[\"valid\"]" in src and "BLOCKED" in src, "18 protection cycle+blocked di jalur run")
+ok("task.graph[\"valid\"]" in _src and "BLOCKED" in _src, "18 protection cycle+blocked di jalur run")
 
 # ── 19: requality (STALE tua tanpa reuse) ────────────────────────────
 hist = experience._load(experience.HIST_FILE)

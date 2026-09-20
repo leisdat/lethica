@@ -123,7 +123,7 @@ def get_version():
                 return v
     except Exception:
         pass
-    return "3.7.1"
+    return "3.7.2"
 
 
 VERSION = get_version()

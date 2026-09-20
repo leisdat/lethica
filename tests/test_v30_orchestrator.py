@@ -182,10 +182,13 @@ ok(t.repair_count <= t.limits["max_repair_attempts"], "limit: repair_count ≤ m
 orchestra._run_tools = orig_run_tools
 
 # ── 10: safety — orchestrator tidak pernah bypass danger confirm ────
-src = open(os.path.join(os.path.dirname(__file__), "..", "core", "orchestra.py")).read()
-ok("is_dangerous" not in src and "DANGER_CONFIRM = False" not in src,
-   "safety: orchestra tidak menyentuh/membypass gerbang bahaya")
-ok("dispatch(reply, config.SELF_PATH)" in src,
+# v3.7.2: logic terpecah ke core/orch_*.py; grepping seluruh modul orch.
+import glob as _glob
+_cores = "\n".join(open(f, encoding="utf-8", errors="replace").read()
+                    for f in _glob.glob(os.path.join(os.path.dirname(__file__), "..", "core", "orch_*.py")))
+ok("is_dangerous" not in _cores and "DANGER_CONFIRM = False" not in _cores,
+   "safety: orch_* tidak menyentuh/membypass gerbang bahaya")
+ok("dispatch(reply, config.SELF_PATH)" in _cores,
    "safety: executor pakai dispatch + sandbox yang sama (bukan bypass)")
 
 # ── 11: task history & log persist ─────────────────────────────────
