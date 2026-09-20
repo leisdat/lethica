@@ -1,3 +1,22 @@
+## v3.6.2 - Version marker hardening + gitignore security fix (2026-09-20)
+**Konteks:** tree kotor pasca v3.6.1 — marker `.lethica_version` belum di-track
+dan fallback versi masih hardcoded `2.5.0`.
+
+**Fixes:**
+- `core/config.py get_version()`: fallback hardcoded `2.5.0` → `3.6.1` lalu
+  disinkron `3.6.2`. Kalau marker hilang, runtime tidak regresi lagi ke versi
+  basi (akar masalah laporan `run` menampilkan 2.5.0 saat changelog sudah 3.6.1).
+- `.lethica_version` sekarang di-commit (3.6.2) sebagai source-of-truth marker.
+- `.gitignore`: pola `config.toml  # Contains routerku API keys` TIDAK pernah
+  aktif — git memperlakukan token setelah spasi sebagai bagian pola, bukan
+  komentar, jadi `config.toml` (berisi API keys routerku) lolos dari ignore.
+  Dipisah jadi komentar baris sendiri + pola bersih. Verifikasi:
+  `git check-ignore -v config.toml` → match.
+- `lessons/`: snapshot runtime lessons + state (scan key/secret: bersih).
+
+**Verifikasi:** `python3 -m py_compile core/*.py` OK; `get_version()` → 3.6.2;
+NUL-byte scan changelog: 0.
+
 ## v3.6.1 - Knowledge Graph fixes + test suite isolation (2026-09-19)
 **Kontek:** v3.6.0 (Knowledge Graph + World Model) belum pernah di-commit — tree
 kotor dari WIP. Session ini: verifikasi + fix deterministik + isolasi test suite.

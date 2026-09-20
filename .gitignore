@@ -31,7 +31,8 @@ graph/index.json
 graph/observability.json
 
 # 🔴 SENSITIVE - API KEYS & TOKENS
-config.toml  # Contains routerku API keys
+# Contains routerku API keys
+config.toml
 .rk_key*
 *.routerku.*.json
 routerku.log
