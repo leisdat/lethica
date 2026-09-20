@@ -20,7 +20,7 @@ class FakeClient:
         self.last_usage = {"completion_tokens": 40, "total_tokens": 400}
         self.retry_prompts = 0
 
-    def chat_failover(self, model, messages, chain, timeout=None, stream_cb=None):
+    def chat_failover(self, model, messages, chain, timeout=None, stream_cb=None, tools=None):
         self.calls += 1
         joined = "\n".join(m.get("content") or "" for m in messages)
         if "format canonical PERSIS" in joined or "JANGAN ulangi markup" in joined:

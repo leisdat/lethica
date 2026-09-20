@@ -33,7 +33,7 @@ class FakeClient:
         self.last_usage = {"completion_tokens": 50, "total_tokens": 500}
         self.seen_tool_response = False
 
-    def chat_failover(self, model, messages, chain, timeout=None, stream_cb=None):
+    def chat_failover(self, model, messages, chain, timeout=None, stream_cb=None, tools=None):
         self.calls += 1
         joined = "\n".join(m.get("content") or "" for m in messages)
         if "E2E_TOOL_RAN" in joined and "<tool_response>" in joined:

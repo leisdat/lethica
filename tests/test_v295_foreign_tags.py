@@ -39,7 +39,9 @@ c3 = ('<function_calls>\n<invoke name="read_file">\n'
       '<parameter name="path">~/lethica/.lethica_version</parameter>\n'
       '</invoke>\n</function_calls>')
 out3 = tags.dispatch(c3, SP)
-check("c3 read_file jalan", "v2.9" in out3, repr(out3[:160]))
+# v3.7 fix: dulu assert "v2.9" — snapshot value .lethica_version (change-detector,
+# gagal setelah bump versi). Sekarang kontrak perilaku: read_file SUKSES baca file itu.
+check("c3 read_file jalan", "Read " in out3 and ".lethica_version" in out3, repr(out3[:160]))
 check("c3 tanpa sisa wrapper", "function_calls" not in tags.strip_tags(c3))
 
 # ── CASE 4: alias nama tool (Bash / Read / Grep) ─────────────────────

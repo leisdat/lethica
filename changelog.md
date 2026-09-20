@@ -1,3 +1,66 @@
+## v3.7.0 - Native function calling + schema-validated dispatch (2026-09-20)
+**Konteks:** tool call diparsing dari teks mentah pakai regex ketat (EXEC_TAG_RE
+dkk). Satu spasi/newline/arg salah tipe di tag kanonik → dispatch return ''
+SILENT-FAIL tanpa penjelasan. Operator minta: (a) native function calling kalau
+provider dukung, (b) validasi skema + error jelas untuk custom-tag path.
+
+**Arsitektur (audit-first, tidak rewrite yang jalan):**
+- `core/tooldef.py` (BARU, 1 sumber kebenaran): skema 16 tool (tipe/wajib/enum/
+  desc) + `validate()` (coerce integer/boolean/enum case-insensitive, required
+  check, unknown-arg warning — stdlib-only, TANPA dep pydantic) + `openai_tools()`
+  (ekspor payload `tools` OpenAI-compatible) + `canon_tool()` alias map
+  (execute_command/Bash/antml:* → canonical) + `EXEC_ORDER` historis.
+- `core/client.py`: `chat(tools=...)` kirim `tools`+`tool_choice=auto`, tangkap
+  `message.tool_calls` → `last_tool_calls`; `chat_stream` akumulasi fragmen
+  delta.tool_calls per index (stream kosong + tool_calls = valid);
+  `chat_failover(tools=...)`: provider balas 400/422 pada payload tools →
+  degrade SEKALI tanpa tools + tanda `tools_rejected` (sesudah itu session full
+  tag-path, hemat 1 call/turn).
+- `core/tags.py`:
+  * `dispatch()` = stage-1 regex proven (tak berubah perilaku) + SPAN TRACKING +
+    stage-2 SALVAGE: tag kanonik yang lolos regex di-parse toleran + divalidasi
+    skema → eksekusi (newline/spasi/arg-order bebas) ATAU `TOOL_ERROR [name]:
+    arg 'x' harus integer...` EKSPLISIT. Dedupe byte-span → tidak dobel-eksekusi.
+  * `dispatch_calls_list()` / `dispatch_calls()`: eksekusi native tool_calls —
+    validasi skema, urutan EXEC_ORDER, return [(id,label,out)] utk role "tool".
+  * `looks_like_tool_attempt()` perluas: tag kanonik RUSAK pun kini terdeteksi
+    (dulu silent, loop mati tanpa retry) → safety-net minta ulang canonical.
+- `core/loop.py`: jalur native FC — assistant msg (content di-omit kalau kosong)
+  + `tool_calls`, hasil per-call sebagai pesan `role:"tool"` + `tool_call_id`
+  (bukan lagi satu tool_response gabungan); `tool_rounds` tetap hard-cap.
+  Config `[model] native_function_calling` (default true).
+- `core/soul.py`: rule "kalau skema tools tersedia, pakai tool_calls; tag XML
+  tetap fallback utk model lokal".
+
+**Keputusan desain:**
+- Transport native FC masuk ke dispatcher tag yang SUDAH teruji via salvage/
+  validate — satu jalur eksekusi (`_exec_tool`), dua jalur input. Tidak ada
+  dispatcher paralel.
+- Pydantic TIDAK dipakai sebagai runtime dep: zero-dep constraint Termux;
+  validate() manual dengan pesan error setara. Skema tooldef tetap subset
+  JSON-Schema sah → bisa diimpor pydantic / di-ekspor ke provider apa pun.
+- Fallback berjenjang: native FC → salvage tag toleran → error eksplisit →
+  safety-net canonical-retry (bad_rounds≤3) → finalisasi. Silent-fail hilang.
+
+**Test (tests/test_v37_toolcalling.py, terdaftar di run_all.py):**
+54 checks: validator + schema export + alias canon + salvage (termasuk regresi
+code-block-mask v2.8.10 + anti dobel-eksekusi) + dispatch_calls_list (urutan
+EXEC_ORDER + args dict + invalid pesan sebab) + loop E2E stub (payload terkirim,
+marker dieksekusi, role tool + id, NATIVE_FC=false, tools_rejected drop) +
+chat()/failover capture + regresi legacy markup + edit_file salvage + mixed reply.
+
+**Perbaikan test lama (sekalian):**
+- test_v295_foreign_tags c3: change-detector assert "v2.9" → kontrak perilaku
+  (read_file sukses baca file, nilai versi bebas). FAIL laten sejak bump versi.
+- stub chat_failover test e2e v2.9.5: + kwarg tools=None.
+- WS test v37 di sandbox dir (Termux /usr/tmp ≠ /tmp → OUTSIDE sandbox trap).
+
+**Verifikasi:** py_compile core/*.py OK; get_version()→3.7.0; run_all.py →
+ALL GREEN (termasuk v37); foreign_tags 17/17; semantic 44/44; knowledge_graph
+44/44. Live FC probe via routerku: gateway hidup tapi upstream free sedang down
+(500 "All providers failed") → jalur degrade (400→tag path) teruji via stub,
+provider round-trip asli perlu diulang saat upstream hidup.
+
 ## v3.6.2 - Version marker hardening + gitignore security fix (2026-09-20)
 **Konteks:** tree kotor pasca v3.6.1 — marker `.lethica_version` belum di-track
 dan fallback versi masih hardcoded `2.5.0`.

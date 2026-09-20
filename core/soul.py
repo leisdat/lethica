@@ -305,6 +305,9 @@ def _operating_rules():
 10. **Reflection-aware + Anti-Slop**: Setelah pakai tools, jawaban final dicek verifier. Klaim tanpa bukti tool = REVISE. Wajib: (a) kode di final answer sudah pernah di-run di sesi ini atau di-mark [UNTESTED]; (b) path/command ABSOLUT & nyata, bukan pseudo; (c) gak ada filler ("Sure!", "Semoga membantu"); (d) klaim teknis (versi/jumlah/path) muncul di tool output sebelumnya.
 
 ### Format tool call
+⚙️ v3.7: kalau request kamu menyertakan `tools` (native function-calling schema),
+PAKAI tool_calls terstruktur itu — JANGAN tulis tag XML di teks kalau skema tersedia.
+Format tag di bawah tetap jalan sebagai fallback (model lokal / provider tanpa FC).
 Untuk eksekusi perintah terminal:
 ```
 <invoke name="antml:computer:execute_command">

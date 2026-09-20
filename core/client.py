@@ -14,7 +14,10 @@ class LClient:
         self.base = (base or config.DEFAULT_BASE).rstrip("/")
         self.key = key or config.API_KEY
         self.last_usage = None  # usage dict dari call terakhir
-        self.last_finish_reason = None  # "stop" | "length" | None
+        self.last_finish_reason = None  # "stop" | "length" | "tool_calls" | None
+        self.last_tool_calls = None  # v3.7: native FC response (OpenAI shape)
+        self.last_status = None  # v3.7: HTTP status terakhir (stream path)
+        self.tools_rejected = False  # v3.7: provider nolak skema tools → degrade permanen/session
 
     def _req(self, method, path, body=None):
         url = f"{self.base}{path}"
@@ -47,9 +50,11 @@ class LClient:
             return ["Free-All", "Free-Kombo", "L", "bai/hy3", "unorouter/allam-2-7b:free", "hc/MiniMax-M3"]
         return sorted([m.get("id", "") for m in d.get("data", [])])
 
-    def chat(self, model, messages, temperature=None, max_tokens=None, timeout=None):
+    def chat(self, model, messages, temperature=None, max_tokens=None, timeout=None,
+             tools=None):
         self.last_finish_reason = None
         self.last_usage = None
+        self.last_tool_calls = None
         body = {
             "model": model, "messages": messages,
             "temperature": config.TEMPERATURE if temperature is None else temperature,
@@ -63,23 +68,36 @@ class LClient:
             # planner/critic, max_tokens<=2048) minta effort rendah; main turn (16k) tidak.
             **({"reasoning_effort": "low"} if (max_tokens or 10 ** 9) <= 2048 else {}),
         }
+        # v3.7: native function calling — skema dari core/tooldef.py
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = "auto"
         r = self._req("POST", "/chat/completions", body)
         if "error" not in r and r.get("choices"):
             ch = (r.get("choices") or [{}])[0]
             self.last_finish_reason = ch.get("finish_reason")
+            # v3.7: structured tool_calls (OpenAI shape) disimpan utk dispatcher
+            msg = ch.get("message") or {}
+            if msg.get("tool_calls"):
+                self.last_tool_calls = msg["tool_calls"]
             # v2.9.2 fix: routerku/OpenRouter taruh usage di TOP-LEVEL, bukan per-choice
             # (dulu ch.get("usage") selalu None → accounting selalu jatuh ke estimasi)
             self.last_usage = ch.get("usage") or r.get("usage")
         return r
 
     # ── SSE streaming ────────────────────────────────────────────────
-    def chat_stream(self, model, messages, temperature=None, max_tokens=None, timeout=None, stream_cb=None):
+    def chat_stream(self, model, messages, temperature=None, max_tokens=None, timeout=None, stream_cb=None,
+                    tools=None):
         """Stream chat via SSE. stream_cb(delta_text, kind) per delta realtime.
-        Return (content, reasoning, model_used) atau (None, None, None) kalau gagal."""
+        Return (content, reasoning, model_used) atau (None, None, None) kalau gagal.
+        v3.7: tools → kumpul delta.tool_calls (arg arrives in fragments per index)."""
         body = {"model": model, "messages": messages,
                 "temperature": config.TEMPERATURE if temperature is None else temperature,
                 "max_tokens": config.MAX_TOKENS if max_tokens is None else max_tokens,
                 "stream": True}
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = "auto"
         req = urllib.request.Request(
             f"{self.base}/chat/completions",
             data=json.dumps(body).encode("utf-8"),
@@ -89,8 +107,11 @@ class LClient:
         )
         content, reasoning, model_used = "", "", None
         usage = None
+        tc_acc = {}   # index → {"id","type","function":{"name","arguments"}}
         self.last_finish_reason = None
         self.last_usage = None
+        self.last_tool_calls = None
+        self.last_status = None
         try:
             with urllib.request.urlopen(req, timeout=timeout or config.HTTP_TIMEOUT) as r:
                 for raw in r:
@@ -107,10 +128,24 @@ class LClient:
                     model_used = d.get("model") or model_used
                     if d.get("usage"):
                         usage = d["usage"]
-                    fr = (d.get("choices") or [{}])[0].get("finish_reason")
+                    choice = (d.get("choices") or [{}])[0]
+                    fr = choice.get("finish_reason")
                     if fr:
                         self.last_finish_reason = fr
-                    delta = (d.get("choices") or [{}])[0].get("delta") or {}
+                    delta = choice.get("delta") or {}
+                    # v3.7: fragment tool_calls (OpenAI streaming shape)
+                    for frag in delta.get("tool_calls") or []:
+                        idx = frag.get("index", 0)
+                        slot = tc_acc.setdefault(idx, {
+                            "id": "", "type": "function",
+                            "function": {"name": "", "arguments": ""}})
+                        if frag.get("id"):
+                            slot["id"] = frag["id"]
+                        ffn = frag.get("function") or {}
+                        if ffn.get("name"):
+                            slot["function"]["name"] += ffn["name"]
+                        if ffn.get("arguments"):
+                            slot["function"]["arguments"] += ffn["arguments"]
                     if delta.get("reasoning_content"):
                         reasoning += delta["reasoning_content"]
                         if stream_cb:
@@ -125,23 +160,29 @@ class LClient:
                                 stream_cb(delta["content"], "content")
                             except Exception:
                                 pass  # idem
-        except urllib.error.HTTPError:
+        except urllib.error.HTTPError as e:
+            self.last_status = e.code
             return None, None, None
         except Exception:
             return None, None, None
-        if not content and not reasoning:
+        # v3.7: stream kosong TAPI tool_calls terakumulasi = valid (finish=tool_calls)
+        if tc_acc:
+            self.last_tool_calls = [tc_acc[k] for k in sorted(tc_acc)]
+        if not content and not reasoning and not self.last_tool_calls:
             return None, None, None
         self.last_usage = usage
         _record_usage(model_used or model, usage, content, reasoning, messages)
         return content, reasoning, model_used
 
     def chat_failover(self, model, messages, models_chain=None, temperature=None, max_tokens=None,
-                      timeout=None, stream_cb=None):
+                      timeout=None, stream_cb=None, tools=None):
         """Coba model chain berurutan. Return (reply, model_used) atau (None, None).
         Entry chain bisa 'provider::model' → route ke provider lain (v2.6).
         v2.9.5: +last-resort lintas-provider (routerku lokal) kalau SEMUA entry utama gagal —
         dulu chain yang semuanya nunjuk provider mati (mis. b.ai 429/404) → (None,None) →
-        loop balik ke prompt tanpa jawaban ("berhenti di tengah")."""
+        loop balik ke prompt tanpa jawaban ("berhenti di tengah").
+        v3.7: tools (skema native FC). Provider yang nolak dengan 400 → retry SEKALI
+        tanpa tools (degrade ke tag path) dan tandai self.tools_rejected=True."""
         chain = list(models_chain or config.FAILOVER_CHAIN)
         chain = [model] + [m for m in chain if m != model]
         # last-resort: provider lokal yang selalu ada (routerku) + model generiknya
@@ -150,6 +191,7 @@ class LClient:
             if e not in chain and e.split("::", 1)[1] != model:
                 lr.append(e)
         chain = chain + lr
+        self.last_tool_calls = None
         for entry in chain:
             cl = self
             m = entry
@@ -164,28 +206,47 @@ class LClient:
                         if console:
                             console.print(f"[dim red]✖ provider '{pname}' gak ada, skip[/dim red]")
                         continue
+            entry_tools = tools
             if stream_cb is not None:
                 content, reasoning, used = cl.chat_stream(
-                    m, messages, temperature, max_tokens, timeout, stream_cb)
+                    m, messages, temperature, max_tokens, timeout, stream_cb, tools=entry_tools)
+                if (content is None and reasoning is None
+                        and entry_tools and getattr(cl, "last_status", None) == 400):
+                    # provider nolak skema tools saat stream → degrade sekali
+                    cl.tools_rejected = True
+                    entry_tools = None
+                    content, reasoning, used = cl.chat_stream(
+                        m, messages, temperature, max_tokens, timeout, stream_cb, tools=None)
                 if content is None and reasoning is None:
                     if console:
                         console.print(f"\n[dim red]✖ {entry} unavailable, failover...[/dim red]")
                     continue
                 self.last_finish_reason = cl.last_finish_reason
+                self.last_tool_calls = getattr(cl, "last_tool_calls", None)
                 return content or reasoning or "(empty reply)", used or m
             for attempt in range(3):
                 t0 = time.time()
-                r = cl.chat(m, messages, temperature, max_tokens, timeout)
+                r = cl.chat(m, messages, temperature, max_tokens, timeout, tools=entry_tools)
                 if "error" not in r and r.get("choices"):
                     msg = r["choices"][0]["message"]
                     reply = msg.get("content") or msg.get("reasoning_content") or "(empty reply)"
                     self.last_usage = cl.last_usage
                     _record_usage(m, cl.last_usage, reply, "", messages)
                     self.last_finish_reason = cl.last_finish_reason
+                    self.last_tool_calls = getattr(cl, "last_tool_calls", None)
                     return reply, m
+                # v3.7: provider nolak payload tools (400) → ulangi SEKALI tanpa tools
+                err = r.get("error") if isinstance(r.get("error"), dict) else {}
+                if entry_tools and err.get("code") in (400, 422):
+                    cl.tools_rejected = True
+                    if console:
+                        console.print(f"[dim yellow]⚠ {entry} nolak skema tools (400) → "
+                                      f"degrade ke tag path[/dim yellow]")
+                    entry_tools = None
+                    continue  # tidak dihitung sebagai retry jaringan
                 # v2.8: backoff with Retry-After awareness (429 rate limit)
-                err_code = (r.get("error") or {}).get("code") if isinstance(r.get("error"), dict) else None
-                err_msg = (r.get("error") or {}).get("message", "") if isinstance(r.get("error"), dict) else ""
+                err_code = err.get("code")
+                err_msg = err.get("message", "")
                 # v2.9.5: 404/400/401 = model/endpoint gak ada → retry gak akan nolong,
                 # langsung failover (dulu buang 1+2+3s tiap turn sebelum pindah provider).
                 if err_code in (400, 401, 403, 404):

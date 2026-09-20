@@ -1,4 +1,5 @@
 # core/tags.py — tag sanitizers (v2.5: semua tool tag termasuk rag) + parser + dispatch
+import json
 import os
 import re
 
@@ -347,15 +348,24 @@ def _normalize_foreign_tool_calls(reply):
 
 def looks_like_tool_attempt(reply):
     """True kalau reply kelihatan MAU panggil tool tapi formatnya rusak/gak dikenal.
-    Dipakai loop.py sebagai safety-net: jangan berhenti, minta model pakai format canonical."""
+    Dipakai loop.py sebagai safety-net: jangan berhenti, minta model pakai format canonical.
+    v3.7: + deteksi TAG KANONIK YANG GAGAL DI-PARSE (mis. `<read_file path="x"
+    start="abc"/>` — regex opsional grup jatuh → dispatch return '' tanpa sebab).
+    Code block di-mask dulu biar contoh literal di prose gak kena false-positive."""
     if not reply or not isinstance(reply, str):
         return False
-    return bool(re.search(
+    r = _mask_code_blocks(reply)
+    if re.search(
         r"<\s*/?\s*(?:tool_calls?|function_calls?|invoke|parameter)\b"
         r"|<\s*tool_call\b"
         r"|\b(?:execute_command|read_file|write_file|edit_file|list_dir|search_content"
         r"|http_request|download_file|web_search|browse|run_code)\s*[\"']\s*>",
-        reply, re.IGNORECASE))
+            r, re.IGNORECASE):
+        return True
+    # v3.7: opener tag kanonik (canonical + skill) yang tidak menghasilkan output
+    _CANON = "memory|plan|browse|web_search|read_file|write_file|list_dir|" \
+             "search_content|http_request|download_file|rag|run_code|task|skill"
+    return bool(re.search(rf"<\s*(?:{_CANON})\b", r, re.IGNORECASE))
 
 
 def _mask_code_blocks(reply):
@@ -374,20 +384,206 @@ def _mask_code_blocks(reply):
     return _INLINE_CODE_RE.sub(lambda m: "\x00" * len(m.group(0)), reply)
 
 
+# ── v3.7: skema + validator + dispatcher tervalidasi ─────────────────
+# dispatch() lama (regex ketat) bisa gagal SENYAP: satu spasi/newline/arg salah
+# tipe di tag kanonik → return '' tanpa penjelasan. v3.7:
+#   1. regex stage tetap (jalur proven, urutan historis sama),
+#   2. salvage stage: tag kanonik yang TIDAK ter-capture regex di-parse toleran
+#      + divalidasi core/tooldef.py → dieksekusi kalau valid, error eksplisit kalau tidak,
+#   3. dispatch_calls(): eksekusi native function-calling (OpenAI tool_calls shape).
+from core import tooldef
+
+
+def _kw_for(name, args):
+    """Map arg nama-skema → parameter fungsi tools lama (yang beda nama/tipe)."""
+    a = dict(args)
+    if name == "exec":
+        a["cmd"] = a.pop("command")
+    if name == "run_code":
+        a["src"] = a.pop("code")
+    # fungsi lama bandingkan recursive/ignore_case sebagai STRING "true"/"false"
+    strbool = {"list_dir": ("recursive",),
+               "search_content": ("recursive", "ignore_case")}
+    for k in strbool.get(name, ()):
+        if k in a:
+            a[k] = "true" if a[k] else "false"
+    return a
+
+
+def _exec_tool(name, args, agent_path):
+    """Satu call Tervalidasi → hasil string. Satu-satunya tempat eksekusi tool."""
+    if name == "task":
+        try:
+            from core import orchestra  # lazy: hindari circular import
+            return orchestra.cli_report(args["goal"])
+        except Exception as ex:
+            return f"Error orchestrator: {ex}"
+    if name == "rag":
+        return rag.tool_rag(args.get("action", "search"), args.get("query"))
+    if name == "browse":
+        args = dict(args)
+        if not args.get("url"):
+            args["url"] = tools.BROWSER_LAST_URL[0] or ""
+    fn = getattr(tools, tooldef.TOOL_DEFS[name]["fn"])
+    kw = _kw_for(name, args)
+    out = fn(**kw)
+    if name == "edit_file" and os.path.abspath(kw["path"]) == agent_path:
+        out += "\n" + tools.tool_self_check()
+    return out
+
+
+def _fmt_errors(name, args_raw, errors):
+    a = str(args_raw)
+    return (f"TOOL_ERROR [{name}]: argumen tidak valid — " + "; ".join(errors) +
+            f"\nDikirim: {a[:200]}\nLihat skema tool dan kirim ulang yang benar.")
+
+
+def dispatch_calls_list(tool_calls, agent_path):
+    """Native function calling: OpenAI-shaped `tool_calls` → list terurut eksekusi
+    [(tool_call_id, label, output_text)]. Validasi skema tooldef; call invalid →
+    TOOL_ERROR eksplisit (bukan dilewat/di-fallback diam-diam)."""
+    parsed = []  # (name|None, args, pre_err, tc_id)
+    for i, tc in enumerate(tool_calls or []):
+        fn = (tc.get("function") or {})
+        tc_id = tc.get("id") or f"call_{i}"
+        name = tooldef.canon_tool(fn.get("name"))
+        raw = fn.get("arguments")
+        if raw is None or raw == "":
+            args = {}
+        elif isinstance(raw, str):
+            try:
+                args = json.loads(raw)
+            except Exception:
+                parsed.append((None, {"raw": raw}, f"arguments bukan JSON valid: {raw[:120]!r}", tc_id))
+                continue
+        else:
+            args = raw
+        if not name:
+            parsed.append((None, {"name": fn.get("name")},
+                           f"tool '{fn.get('name')}' tidak dikenal", tc_id))
+            continue
+        if not isinstance(args, dict):
+            parsed.append((name, args, "arguments harus JSON object", tc_id))
+            continue
+        parsed.append((name, args, None, tc_id))
+    parsed.sort(key=lambda p: (tooldef._ORDER_RANK.get(p[0] or "", -1) if p[2] is None
+                               else -2))
+    results = []
+    for name, args, pre_err, tc_id in parsed:
+        if pre_err:
+            label = name or str((args or {}).get("name") or "unknown_tool")
+            results.append((tc_id, label, _fmt_errors(label, args, [pre_err])))
+            continue
+        icon = tooldef.TOOL_DEFS[name]["icon"]
+        clean, errors, warns = tooldef.validate(name, args)
+        if errors:
+            _act(icon, name, "INVALID")
+            results.append((tc_id, name, _fmt_errors(name, args, errors + warns)))
+            continue
+        detail = (clean.get("cmd") or clean.get("path") or clean.get("url")
+                  or clean.get("query") or clean.get("goal") or clean.get("name") or "")
+        _act(icon, name, str(detail)[:80])
+        try:
+            results.append((tc_id, name, _exec_tool(name, clean, agent_path)))
+        except Exception as ex:
+            results.append((tc_id, name, f"TOOL_ERROR [{name}]: eksekusi gagal: {ex}"))
+    return results
+
+
+def join_outputs(results):
+    """[(id,label,text)] → blok tool_response teks (untuk log/user view)."""
+    return "\n\n".join(f"[{label}]\n{text}" for _, label, text in results)
+
+
+def dispatch_calls(tool_calls, agent_path):
+    """Compat wrapper: langsung return teks gabungan."""
+    return join_outputs(dispatch_calls_list(tool_calls, agent_path))
+
+
+# tag kanonik salvage: mana yang pakai body (bukan self-closing murni)
+_BODY_TAGS = {"write_file": "content", "run_code": "code", "edit_file": "body"}
+_SIMPLE_TAGS = None  # lazy dari tooldef
+
+
+def _span_overlap(a, spans):
+    for s, e in spans:
+        if a[0] < e and s < a[1]:
+            return True
+    return False
+
+
+def _salvage_unparsed(reply, agent_path, matched_spans, outputs):
+    """Stage v3.7: tag kanonik yang regex ketat stage-1 LEWATKAN (spasi/newline/arg
+    salah tipe) → parse toleran + validasi skema → eksekusi ATAU error eksplisit.
+    Dedupe via byte-span biar call yang sudah jalan di stage-1 tidak dobel."""
+    global _SIMPLE_TAGS
+    if _SIMPLE_TAGS is None:
+        _SIMPLE_TAGS = [n for n in tooldef.EXEC_ORDER if n != "exec"]
+    # opener longgar: <name ...attrs... [/>] — group3 = '/' kalau self-closing
+    opener = re.compile(
+        r"<\s*(" + "|".join(_SIMPLE_TAGS) + r")((?:[^>\"']|\"[^\"]*\"|'[^']*')*?)(/?)>",
+        re.IGNORECASE)
+    for m in opener.finditer(reply):
+        name = m.group(1).lower()
+        attrs = _parse_tag_attrs(m.group(2))
+        span = (m.start(), m.end())
+        if name in _BODY_TAGS:
+            if m.group(3) == "/":
+                continue  # self-closing body-tag = bukan attempt nyata
+            cm = re.search(rf"</\s*{name}\s*>", reply[m.end():], re.IGNORECASE)
+            if not cm:
+                continue
+            inner = reply[m.end():m.end() + cm.start()]
+            span = (m.start(), m.end() + cm.end())
+            if name == "edit_file":
+                tg = re.search(r"<target>(.*?)</target>", inner, re.DOTALL | re.IGNORECASE)
+                rp = re.search(r"<replacement>(.*?)</replacement>", inner, re.DOTALL | re.IGNORECASE)
+                if tg:
+                    attrs["target"] = _unesc(tg.group(1).strip("\n"))
+                if rp:
+                    attrs["replacement"] = _unesc(rp.group(1).strip("\n"))
+            else:
+                attrs[_BODY_TAGS[name]] = _unesc(inner.strip("\n"))
+        elif m.group(3) != "/":
+            # simple tag tanpa self-close: valid (dispatcher lama terima '>'), lanjut
+            pass
+        if _span_overlap(span, matched_spans):
+            continue  # sudah dieksekusi stage-1
+        matched_spans.append(span)
+        clean, errors, warns = tooldef.validate(name, attrs)
+        icon = tooldef.TOOL_DEFS[name]["icon"]
+        if errors:
+            _act(icon, name, "INVALID")
+            outputs.append(f"[{name}]\n" + _fmt_errors(name, attrs, errors + warns))
+            continue
+        detail = (clean.get("path") or clean.get("url") or clean.get("query")
+                  or clean.get("goal") or clean.get("name") or "")
+        _act(icon, name, str(detail)[:80])
+        try:
+            outputs.append(f"[{name}]\n{_exec_tool(name, clean, agent_path)}")
+        except Exception as ex:
+            outputs.append(f"[{name}]\nTOOL_ERROR [{name}]: {ex}")
+
+
 def dispatch(reply, agent_path):
-    """Extract and execute all tool calls from reply. Return tool_outputs string."""
+    """Extract and execute all tool calls from reply. Return tool_outputs string.
+    v3.7: regex stage (proven) + salvage stage tervalidasi skema → tanpa silent-fail."""
     # v2.9.5: mask code block DULU (span-preserving) baru normalisasi — biar markup asing
     # yang cuma CONTOH di fenced/inline code gak ikut dinormalisasi jadi tag nyata (jaga v2.8.10).
     reply = _mask_code_blocks(reply)
     reply = sanitize_tool_tags(reply)
     outputs = []
+    matched = []  # v3.7: span yang sudah dieksekusi regex stage-1 (dedupe salvage)
     for m in tools.READ_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         _act("📖", "read_file", m.group(1))
         outputs.append(f"[read_file]\n{tools.tool_read_file(m.group(1), m.group(2), m.group(3))}")
     for m in tools.WRITE_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         _act("✍️", "write_file", m.group(1))
         outputs.append(f"[write_file]\n{tools.tool_write_file(m.group(1), _unesc(m.group(3)), append=(m.group(2) == 'true'))}")
     for m in tools.EDIT_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         _act("🛠️", "edit_file", m.group(1))
         path = m.group(1)
         out = tools.tool_edit_file(path, _unesc(m.group(2)), _unesc(m.group(3)))
@@ -395,42 +591,54 @@ def dispatch(reply, agent_path):
             out += "\n" + tools.tool_self_check()
         outputs.append(f"[edit_file]\n{out}")
     for m in tools.LIST_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         _act("📂", "list_dir", m.group(1))
         outputs.append(f"[list_dir]\n{tools.tool_list_dir(m.group(1), m.group(2) or 'false')}")
     for m in tools.SEARCH_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         _act("🔍", "search_content", m.group(1))
         outputs.append(f"[search_content]\n{tools.tool_search_content(m.group(1), _unesc(m.group(2)), m.group(3) or 'false', m.group(4) or 'false')}")
     for m in tools.HTTP_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         _act("🌐", "http_request", m.group(1))
         outputs.append(f"[http_request]\n{tools.tool_http_request(m.group(1), m.group(2) or 'GET', m.group(4), m.group(3))}")
     for m in tools.DL_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         _act("⬇️", "download_file", m.group(1))
         outputs.append(f"[download_file]\n{tools.tool_download_file(m.group(1), m.group(2))}")
     for m in tools.WEBSEARCH_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         a = _parse_tag_attrs(m.group(1))
         _act("🔎", "web_search", a.get('query', ''))
         outputs.append(f"[web_search]\n{tools.tool_web_search(_unesc(a.get('query', '')), a.get('limit'))}")
     for m in tools.BROWSE_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         a = _parse_tag_attrs(m.group(1))
         outputs.append(f"[browse]\n{tools.tool_browse(_unesc(a.get('url') or tools.BROWSER_LAST_URL[0] or ''), _unesc(a['data']) if a.get('data') else None, a.get('method', 'GET'))}")
     for m in tools.MEMORY_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         a = _parse_tag_attrs(m.group(1))
         outputs.append(f"[memory]\n{tools.tool_memory(a.get('action'), _unesc(a['key']) if a.get('key') else None, _unesc(a['content']) if a.get('content') else None)}")
     for m in tools.PLAN_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         a = _parse_tag_attrs(m.group(1))
         outputs.append(f"[plan]\n{tools.tool_plan(a.get('action'), _unesc(a['content']) if a.get('content') else None)}")
     for m in rag.RAG_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         a = _parse_tag_attrs(m.group(1))
         outputs.append(f"[rag]\n{rag.tool_rag(a.get('action', 'search'), a.get('query'))}")
     for m in tools.EXEC_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         cmd = m.group(1).strip()
         _act("💻", "execute_command", cmd[:80])
         outputs.append(f"[execute_command]\n{tools.tool_run_command(cmd)}")
     for m in tools.RUNCODE_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         _act("⚙️", "run_code", m.group(1))
         outputs.append(f"[run_code]\n{tools.tool_run_code(m.group(1), _unesc(m.group(3)), int(m.group(2) or 30))}")
     TASK_TAG_RE = __import__("re").compile(r"<task\s+([^>]*?)/?>", __import__("re").IGNORECASE)
     for m in TASK_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         a = _parse_tag_attrs(m.group(1))
         goal = _unesc(a.get("goal") or "")
         _act("🛰️", "task", goal[:60])
@@ -440,6 +648,7 @@ def dispatch(reply, agent_path):
         except Exception as ex:
             outputs.append(f"[task]\nError orchestrator: {ex}")
     for m in tools.SKILL_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
         a = _parse_tag_attrs(m.group(1))
         name = a.get('name')
         if not name:
@@ -448,6 +657,11 @@ def dispatch(reply, agent_path):
         file = a.get('file')
         _act("🎯", "skill", name or action)
         outputs.append(f"[skill]\n{tools.tool_skill(name, action, file)}")
+    # ── v3.7 salvage stage: tag kanonik yang regex ketat stage-1 lewatkan ──
+    try:
+        _salvage_unparsed(reply, agent_path, matched, outputs)
+    except Exception as ex:
+        outputs.append(f"[salvage]\nTOOL_ERROR: stage salvage gagal: {ex}")
     return "\n\n".join(outputs) if outputs else ""
 
 

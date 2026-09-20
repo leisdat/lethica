@@ -117,6 +117,10 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
     tool_rounds = 0
     cont_rounds = 0
     bad_rounds = 0
+    # v3.7: native function calling — skema dari tooldef.
+    # Matikan: [model] native_function_calling = false di config.toml.
+    from core import tooldef as _tooldef
+    tools_payload = _tooldef.openai_tools() if getattr(config, "NATIVE_FC", False) else None
     while tool_rounds < max_rounds:
         turn_t0 = time.time()
         # hard budget guard (v2.8.6): stop kalau budget harian habis
@@ -127,17 +131,40 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
         elif msg:
             console.print(f"[bold yellow]{msg}[/bold yellow]")
         if config.STREAM:
-            reply, used = _streamed_call(cl, model, messages)
+            reply, used = _streamed_call(cl, model, messages, tools=tools_payload)
             console.print()
         else:
             with console.status("[bold cyan]🧠 lethica analyzing...[/bold cyan]", spinner="dots2"):
                 reply, used = cl.chat_failover(
-                    model, messages, config.FAILOVER_CHAIN, timeout=config.HTTP_TIMEOUT)
+                    model, messages, config.FAILOVER_CHAIN, timeout=config.HTTP_TIMEOUT,
+                    tools=tools_payload)
         if reply is None:
             console.print(f"[bold red]✖ all models failed ({time.time()-turn_t0:.0f}s)[/bold red]")
             return None, None
+        # provider nolak skema tools → session ini full tag-path saja (hemat 1 call/turn)
+        if getattr(cl, "tools_rejected", False) and tools_payload:
+            tools_payload = None
         console.print(f"[dim]({used}, {time.time()-turn_t0:.0f}s)[/dim]")
         reply = ui.terse_filter(reply)
+        # ── v3.7: JALUR NATIVE FC — tool_calls terstruktur dari API ──────────
+        native_calls = getattr(cl, "last_tool_calls", None)
+        if native_calls:
+            tool_rounds += 1  # hard cap MAX_TOOL_ROUNDS juga berlaku utk jalur native
+            content = None if (not reply or reply == "(empty reply)") else reply
+            amsg = {"role": "assistant", "tool_calls": native_calls}
+            if content:
+                amsg["content"] = content
+            messages.append(amsg)
+            if content:
+                ui.render_md(tags.strip_tags(content), f"[bold yellow]🤖 lethica ({used})[/bold yellow]")
+            console.print(f"[dim]⚙ executing {len(native_calls)} native tool call(s)...[/dim]")
+            results = tags.dispatch_calls_list(native_calls, config.SELF_PATH)
+            for tc_id, label, out_text in results:
+                messages.append({"role": "tool", "tool_call_id": tc_id,
+                                 "name": label, "content": str(out_text)[:12000]})
+            had_tools = True
+            console.print("[dim green]✓ native tools executed[/dim green]")
+            continue
         # auto-continue kalau output kepotong (length / usage nyentuh max / fence ganjil)
         if _output_truncated(cl, reply):
             if cont_rounds >= max_cont:
@@ -214,8 +241,9 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
     return reply, used
 
 
-def _streamed_call(cl, model, messages):
-    """Streaming chat call dengan Live panel. Return (reply, used)."""
+def _streamed_call(cl, model, messages, tools=None):
+    """Streaming chat call dengan Live panel. Return (reply, used).
+    v3.7: tools → native FC (delta tool_calls diakumulasi di chat_stream)."""
     buf = []
 
     def _cb(delta, kind):
@@ -230,7 +258,7 @@ def _streamed_call(cl, model, messages):
     with Live(_panel(Text(""), model), console=console, auto_refresh=False) as live:
         reply, used = cl.chat_failover(
             model, messages, config.FAILOVER_CHAIN,
-            timeout=config.HTTP_TIMEOUT, stream_cb=_cb)
+            timeout=config.HTTP_TIMEOUT, stream_cb=_cb, tools=tools)
         display_final = tags.strip_tags("".join(buf))
         live.update(_panel(Markdown(display_final), model), refresh=True)
     return reply, used

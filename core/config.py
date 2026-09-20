@@ -123,7 +123,7 @@ def get_version():
                 return v
     except Exception:
         pass
-    return "3.6.2"
+    return "3.7.0"
 
 
 VERSION = get_version()
@@ -147,6 +147,7 @@ _DERIVED = [
     ("STREAM",          ("model", "stream", True)),
     ("SHOW_REASONING",   ("model", "show_reasoning", False)),
     ("AUTOLOAD_SKILLS",  ("skills", "autoload", []), list),
+    ("NATIVE_FC",        ("model", "native_function_calling", True)),
 ]
 
 
@@ -180,6 +181,7 @@ WINDOW_SIZE, PERSONA_MODE = _d0["WINDOW_SIZE"], _d0["PERSONA_MODE"]
 HTTP_TIMEOUT, SEARCH_LIMIT, DANGER_CONFIRM = _d0["HTTP_TIMEOUT"], _d0["SEARCH_LIMIT"], _d0["DANGER_CONFIRM"]
 FAILOVER_CHAIN, STREAM, SHOW_REASONING = _d0["FAILOVER_CHAIN"], _d0["STREAM"], _d0["SHOW_REASONING"]
 AUTOLOAD_SKILLS = _d0["AUTOLOAD_SKILLS"]
+NATIVE_FC = _d0["NATIVE_FC"]
 DAILY_BUDGET, ACTIVE_PROVIDER, VERIFIER_MODEL = _d0["DAILY_BUDGET"], _d0["ACTIVE_PROVIDER"], _d0["VERIFIER_MODEL"]
 VERSION = get_version()
 
