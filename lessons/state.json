@@ -1,66 +1,6 @@
 {
  "ops": [
   {
-   "ts": 1789136304.5005987,
-   "goal": "y",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136310.400045,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136319.8776467,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136325.4387214,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136330.6435542,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136335.3584082,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
    "ts": 1789136354.544055,
    "goal": "halo",
    "score": 100.0,
@@ -2572,6 +2512,71 @@
    "verdict": null,
    "truncated": false,
    "tools": {}
+  },
+  {
+   "ts": 1790254538.3748868,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790254649.4460697,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790254661.3568695,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790254670.209844,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790255166.4107358,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 8,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {
+    "execute_command": {
+     "calls": 8,
+     "errors": 0
+    }
+   }
+  },
+  {
+   "ts": 1790255252.7025883,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
   }
  ],
  "lessons": [
@@ -2878,10 +2883,6 @@
  ],
  "templates": [
   {
-   "ts": 1789136497.8552067,
-   "text": "templat sukses [execute_command] skor 100.0%: pola tool ini terbukti bersih, reusable"
-  },
-  {
    "ts": 1789136939.206408,
    "text": "templat sukses [execute_command] skor 100.0%: pola tool ini terbukti bersih, reusable"
   },
@@ -2996,14 +2997,18 @@
   {
    "ts": 1789697785.210769,
    "text": "templat sukses [execute_command] skor 100.0%: pola tool ini terbukti bersih, reusable"
+  },
+  {
+   "ts": 1790255166.4107358,
+   "text": "templat sukses [execute_command] skor 100.0%: pola tool ini terbukti bersih, reusable"
   }
  ],
- "op_counter": 954,
- "last_bucket": 95,
+ "op_counter": 967,
+ "last_bucket": 96,
  "strategy": "stabil",
  "failure_points": [],
- "avg_score": 95.5,
- "turns": 206,
+ "avg_score": 97.0,
+ "turns": 212,
  "last_score": 100.0,
- "trend_at": 950
+ "trend_at": 966
 }
