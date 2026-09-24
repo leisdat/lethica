@@ -18,6 +18,23 @@ from core.config import CFG  # noqa: F401  (backward-compat re-export)
 
 SESSIONS_DIR = config.SESSIONS_DIR
 
+# v3.8: nama tool dari tag markup → baris ringkas "⚙ read_file · search"
+_TAGNAME_RE = re.compile(
+    r"<(invoke|read_file|write_file|edit_file|list_dir|search_content|http_request|"
+    r"download_file|web_search|browse|memory|plan|rag|skill|task|tool_call)\b", re.I)
+
+
+def _tc_name(tc):
+    """Nama fungsi dari native tool_call (format OpenAI atau dict biasa)."""
+    try:
+        return tc["function"]["name"]
+    except Exception:
+        pass
+    try:
+        return tc.get("name") or "tool"
+    except Exception:
+        return "tool"
+
 
 def _new_messages():
     return [{"role": "system", "content": _refreshed_sysprompt()}]
@@ -157,13 +174,12 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
             messages.append(amsg)
             if content:
                 ui.render_md(tags.strip_tags(content), f"[bold yellow]🤖 lethica ({used})[/bold yellow]")
-            console.print(f"[dim]⚙ executing {len(native_calls)} native tool call(s)...[/dim]")
+            ui.tool_line([_tc_name(tc) for tc in native_calls])
             results = tags.dispatch_calls_list(native_calls, config.SELF_PATH)
             for tc_id, label, out_text in results:
                 messages.append({"role": "tool", "tool_call_id": tc_id,
                                  "name": label, "content": str(out_text)[:12000]})
             had_tools = True
-            console.print("[dim green]✓ native tools executed[/dim green]")
             continue
         # auto-continue kalau output kepotong (length / usage nyentuh max / fence ganjil)
         if _output_truncated(cl, reply):
@@ -183,15 +199,11 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
         display = tags.strip_tags(reply)
         if display and not config.STREAM:
             ui.render_md(display, f"[bold yellow]🤖 lethica ({used})[/bold yellow]")
-        # v2.9.5: cuma bilang "executing tools" kalau reply MEMANG punya tool call
-        _has_tag = bool(re.search(r"<(?:invoke|read_file|write_file|edit_file|list_dir|"
-                                  r"search_content|http_request|download_file|web_search|browse|"
-                                  r"memory|plan|rag|skill|task|tool_call)", reply or "", re.I))
-        if _has_tag:
-            console.print(f"[dim]⚙ executing tools for {used}...[/dim]")
+        # v3.8: satu baris ringkas nama tool (bukan 2 baris executing/executed)
+        _names = [m.lower() for m in _TAGNAME_RE.findall(reply or "")]
+        if _names:
+            ui.tool_line(_names)
         out = tags.dispatch(reply, config.SELF_PATH)
-        if out:
-            console.print("[dim green]✓ tools executed[/dim green]")
         if not out:
             # v2.9.5 safety-net: model kelihatan MAU panggil tool tapi formatnya gak
             # ke-parse (markup asing) → jangan balik ke prompt, minta ulang canonical.
@@ -388,8 +400,14 @@ def _cmd_provider(cl, model):
 
 def _cmd_config():
     """/config — tampil + optional edit config.toml, lalu reload."""
-    console.print(Panel(config.CONFIG_FILE, title="[bold yellow]config file[/bold yellow]", border_style="yellow"))
-    console.print(Syntax(open(config.CONFIG_FILE).read(), "toml", theme="monokai"))
+    console.print(Panel(config.CONFIG_FILE,
+                        title=f"[bold {ui.c('warn')}]config file[/bold {ui.c('warn')}]",
+                        border_style=ui.c("warn")))
+    _txt = open(config.CONFIG_FILE).read()
+    # v3.8: mask kredensial di layar — config.toml isinya API key
+    _txt = re.sub(r'(?m)^(\s*(?:key|api_key|token|secret)\s*=\s*)"[^"]*"',
+                  r'\1"•••"', _txt)
+    console.print(Syntax(_txt, "toml", theme="monokai"))
     if Confirm.ask("Edit config sekarang?", default=False):
         import subprocess
         subprocess.run([os.environ.get("EDITOR", "nano"), config.CONFIG_FILE])
@@ -427,90 +445,71 @@ def _cmd_self():
                             title="[bold yellow]changelog[/bold yellow]", border_style="yellow"))
 
 
-MENU_TEXT = """[cyan]/menu[/cyan]     help
-[cyan]/model[/cyan]    switch model
-[cyan]/provider[/cyan] switch/add provider baru (v2.6)
-[cyan]/history[/cyan]  show msg count
-[cyan]/clear[/cyan]    reset conversation
-[cyan]/restart[/cyan]  reload system prompt
-[cyan]/self[/cyan]     show self info + changelog
-[cyan]/config[/cyan]   show/edit config.toml + reload
-[cyan]/tokens[/cyan]   token usage + budget (v2.5)
-[cyan]/toolstats[/cyan] tool call stats sesi ini (v2.8)
-[cyan]/learning[/cyan]  skor siluman + pelajaran + strategi (v2.9)
-[cyan]/save[/cyan]     save session (/save nama)
-[cyan]/load[/cyan]     load session (/load nama, tanpa nama = list)
-[cyan]/improve[/cyan]  self-improvement mode
-[cyan]/exit[/cyan]     bye"""
-
-
 # ── main loop ───────────────────────────────────────────────────────
 
-def main():
-    os.chdir(config.WORKSPACE)
-    ui.show_logo()
-    cl = _active_client()
-    model = ui.select_model(cl)
-    ui.show_logo()
-    console.print(Panel(
-        Text.assemble(
-            ("Status: ", "bold green"), ("ONLINE\n", "bold cyan"),
-            ("Model: ", "bold green"), (f"{model}\n", "bold yellow"),
-            ("Persona: ", "bold green"), (f"{config.PERSONA_MODE}\n", "bold cyan"),
-            ("Sandbox: ", "bold green"), (f"{config.WORKSPACE}\n", "white"),
-            ("Backend: ", "bold green"), (f"{config.DEFAULT_BASE}\n", "dim"),
-        ),
-        border_style="green",
-    ))
-    console.print("[dim]Slash: /menu /model /task /registry /experience /history /clear /restart /self /improve /config /tokens /exit[/dim]\n")
-
-    # v2.5: refresh backup last-known-good tiap startup (backup selalu fresh)
-    bak = tools.backup_self()
-    if bak:
-        console.print(f"[dim]✓ last-known-good backup: {bak}[/dim]")
-
-    console.print(f"[dim]{rag.tool_rag('rebuild')}[/dim]")
-    # v3.1: refresh kualitas task-memory (STALE/REUSABLE) dari bukti historis
+def _boot_maintenance():
+    """Maintenance startup → list string ringkas (v3.8). Default digabung jadi
+    SATU baris oleh ui.startup_summary; VERBOSE=true → satu baris per item."""
+    out = []
+    try:
+        if tools.backup_self():
+            out.append("backup ok")
+    except Exception:
+        pass
+    try:
+        rb = rag.tool_rag("rebuild")
+        if rb:
+            out.append(str(rb)[:48])
+    except Exception:
+        pass
     try:
         from core import experience
         n = experience.requality()
         if n:
-            console.print(f"[dim]✓ experience requality: {n} memori di-update[/dim]")
+            out.append(f"requality {n}")
     except Exception:
         pass
-    # v3.5: semantic memory maintenance (consolidate + decay) — non-blocking
     try:
         from core import memory as semantic_mem
         c = semantic_mem.consolidate()
         d = semantic_mem.decay()
         if c or d:
-            console.print(f"[dim]✓ v3.5 memory: consolidated={c} decayed={d}[/dim]")
+            out.append(f"mem c{c}/d{d}")
     except Exception:
         pass
-    # v3.6: knowledge graph maintenance — freshness reclassify + validasi (non-blocking)
     try:
         from core import world as world_mod, graph as graph_mod
         fr = world_mod.refresh()
         issues = graph_mod.validate()
-        n_nodes = len(graph_mod._nodes())
-        n_edges = len(graph_mod._edges())
-        msg = (f"✓ v3.6 graph: {n_nodes} nodes/{n_edges} edges "
-               f"stale={fr.get('stale', 0)} expired_edges={fr.get('expired_edges', 0)}")
+        out.append(f"graph {len(graph_mod._nodes())}n/{len(graph_mod._edges())}e "
+                   f"stale={fr.get('stale', 0)}")
         if not issues.get("ok"):
-            msg += f"  issues={issues.get('counts')}"
-        console.print(f"[dim]{msg}[/dim]")
+            out.append(f"graph issues {issues.get('counts')}")
     except Exception:
         pass
-    messages = _new_messages()
+    return out
+
+
+def main():
+    os.chdir(config.WORKSPACE)
+    cl = _active_client()
+    model = ui.select_model(cl, current=config.DEFAULT_MODEL, auto=True)
+    ui.show_logo(model)
+    ui.setup_readline()
+    boot = _boot_maintenance()
     if ui.load_latest_snapshot():
-        console.print("[dim]✓ hydrated from latest snapshot[/dim]")
+        boot.append("hydrated")
+    ui.startup_summary(boot)
+    ui.status_line(model=model)
+    console.print(f"[{ui.c('muted')}]/help buat daftar command[/{ui.c('muted')}]\n")
+    messages = _new_messages()
 
     turn_counter = [0]
     done_actions_log = []
 
     while True:
         try:
-            user_input = Prompt.ask("\n[bold magenta]➜ lethica>[/bold magenta]").strip()
+            user_input = ui.ask_prompt(model, turn_counter[0] + 1).strip()
             if not user_input:
                 continue
             cmd = user_input.lower()
@@ -521,20 +520,23 @@ def main():
                     sp = ui.save_snapshot(turn_counter[0], user_input, _last_assistant(messages), done_actions_log)
                     console.print(f"[dim]snapshot saved: {sp}[/dim]")
                 ui.save_history(messages)
-                console.print("[bold magenta]Lethica signing off. Ttd, lethica.[/bold magenta]")
+                ui.save_readline()
+                console.print(f"[bold {ui.c('brand')}]Lethica signing off. Ttd, lethica.[/bold {ui.c('brand')}]")
                 break
 
             if cmd.startswith("/save") or cmd.startswith("/load"):
                 messages = _cmd_save_load(user_input, cmd, messages, turn_counter, done_actions_log)
                 continue
 
-            if cmd == "/menu":
-                console.print(Panel(MENU_TEXT, title="commands", border_style="magenta"))
+            if cmd in ("/menu", "/help", "/?", "/h"):
+                console.print(Panel(ui.help_table(),
+                                    title=f"[bold {ui.c('brand')}]lethica — commands[/bold {ui.c('brand')}]",
+                                    border_style=ui.c("brand")))
                 continue
 
             if cmd == "/model":
-                model = ui.select_model(cl)
-                console.print(f"[bold green]→ {model}[/bold green]")
+                model = ui.select_model(cl, current=model)
+                console.print(f"[bold {ui.c('ok')}]→ {model}[/bold {ui.c('ok')}]")
                 continue
 
             if cmd in ("/provider", "/prov", "/m/provider"):
@@ -654,11 +656,11 @@ def main():
             ui.save_history(messages)
         except KeyboardInterrupt:
             ui.save_history(messages)
-            console.print("\n[bold magenta]Session ended.[/bold magenta]")
+            ui.save_readline()
+            console.print(f"\n[bold {ui.c('brand')}]Session ended.[/bold {ui.c('brand')}]")
             break
         except Exception as e:
-            console.print(f"[bold red]error:[/bold red] {e}")
-            traceback.print_exc()
+            ui.err(str(e), exc=e)
 
 
 def _auto_ground(messages):

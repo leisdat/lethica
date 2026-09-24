@@ -12,11 +12,15 @@
 import json
 import os
 import re
+import sys
 import time
 
+from rich import box
 from rich.console import Console
+from rich.console import Group
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 from rich.prompt import Prompt
@@ -35,17 +39,186 @@ LOGO = """\
 """
 
 
+# ── v3.8 theme tokens (satu sumber warna, biar konsisten & gampang diganti) ──
+THEME = {
+    "brand": "magenta",
+    "accent": "cyan",
+    "ok": "green",
+    "warn": "yellow",
+    "err": "red",
+    "muted": "dim",
+    "user": "bright_white",
+}
+
+
+def c(key):
+    """Ambil warna tema; fallback 'white' kalau key salah."""
+    return THEME.get(key, "white")
+
+
+# ── v3.8 command registry (satu sumber: /help + tab-completion + /menu) ──
+# (cmd, arg, desc). Tambah di sini → otomatis muncul di /help DAN completion.
+COMMANDS = [
+    ("/menu", "", "help ringkas (alias /help)"),
+    ("/model", "", "ganti model aktif"),
+    ("/provider", "", "ganti / tambah provider"),
+    ("/task", "<goal>", "orchestrator multi-agent"),
+    ("/registry", "", "skill registry"),
+    ("/experience", "[recall <goal>]", "memory pengalaman"),
+    ("/learning", "", "skor siluman + strategi"),
+    ("/tokens", "", "token usage + budget"),
+    ("/toolstats", "", "statistik tool sesi ini"),
+    ("/history", "", "jumlah pesan di konteks"),
+    ("/save", "[nama]", "simpan sesi"),
+    ("/load", "[nama]", "muat sesi"),
+    ("/clear", "", "reset percakapan"),
+    ("/restart", "", "reload system prompt"),
+    ("/self", "", "info source + changelog"),
+    ("/config", "", "lihat / edit config.toml"),
+    ("/improve", "", "self-improvement mode"),
+    ("/exit", "", "keluar"),
+]
+_CMD_NAMES = [x[0] for x in COMMANDS]
+
+
+def help_table():
+    """Tabel command rapi (dipakai /menu & /help). Lebar aman di 80 kolom."""
+    t = Table(box=box.SIMPLE_HEAD, show_header=True, header_style=f"bold {c('brand')}",
+              border_style=c('muted'), padding=(0, 1), expand=False)
+    t.add_column("cmd", style=c("accent"), no_wrap=True)
+    t.add_column("arg", style=c("muted"), no_wrap=True)
+    t.add_column("fungsi", style="white")
+    for cmd, arg, desc in COMMANDS:
+        t.add_row(cmd, arg, desc)
+    return t
+
+
 # ── Banner ──────────────────────────────────────────────────────────
 
-def show_logo():
-    sub = (f"[bold red]{config.PERSONA_MODE.upper()} • v{config.VERSION} • "
-           "config.toml • web/browser/memory/plan/rag • routerku-powered[/bold red]")
-    console.print(Panel(
-        Text(LOGO, style="bold magenta", justify="center"),
-        title=f"[bold cyan]Lethica v{config.VERSION}[/bold cyan]",
-        subtitle=sub,
-        border_style="red",
-    ))
+def show_logo(model=None):
+    """Banner. Mode dari config.BANNER: 'compact' (default) | 'full' | 'off'."""
+    mode = str(getattr(config, "BANNER", "compact") or "compact").lower()
+    if mode == "off":
+        return
+    if mode == "full":
+        sub = (f"[bold {c('err')}]{config.PERSONA_MODE.upper()} • v{config.VERSION} • "
+               "config.toml • web/browser/memory/plan/rag • routerku-powered[/bold red]")
+        console.print(Panel(
+            Text(LOGO, style=f"bold {c('brand')}", justify="center"),
+            title=f"[bold {c('accent')}]Lethica v{config.VERSION}[/bold {c('accent')}]",
+            subtitle=sub,
+            border_style=c("err"),
+        ))
+        return
+    # compact: 1 baris, hemat ruang vertikal di HP
+    brand = Text()
+    brand.append("◆ lethica ", style=f"bold {c('brand')}")
+    brand.append(f"v{config.VERSION}", style=c("muted"))
+    brand.append("  •  ", style=c("muted"))
+    brand.append(str(config.PERSONA_MODE), style=c("accent"))
+    if model:
+        brand.append("  •  ", style=c("muted"))
+        brand.append(str(model), style=c("ok"))
+    console.print(brand)
+
+
+def status_line(model=None, extra=None):
+    """Satu baris status pengganti panel 6-baris (v3.8)."""
+    parts = []
+    if model:
+        parts.append(f"[{c('ok')}]{model}[/{c('ok')}]")
+    parts.append(f"[{c('muted')}]{config.ACTIVE_PROVIDER}[/{c('muted')}]")
+    parts.append(f"[{c('muted')}]{config.WORKSPACE}[/{c('muted')}]")
+    if extra:
+        parts.append(f"[{c('muted')}]{extra}[/{c('muted')}]")
+    console.print("  ".join(parts))
+
+
+def startup_summary(items):
+    """Ringkas log maintenance startup jadi SATU baris (v3.8).
+    VERBOSE=true → satu baris per item (buat debugging)."""
+    items = [str(i) for i in (items or []) if i]
+    if not items:
+        return
+    if getattr(config, "VERBOSE", False):
+        for it in items:
+            console.print(f"[{c('muted')}]· {it}[/{c('muted')}]")
+        return
+    console.print(f"[{c('muted')}]✓ {' · '.join(items)}[/{c('muted')}]")
+
+
+# ── v3.8 input layer: history + tab-completion + prompt rapi ─────────
+
+_HISTORY_FILE = os.path.join(config.LETHICA_DIR, ".lethica_history")
+
+
+def _completer(text, state):
+    if state == 0:
+        _completer.matches = [n for n in _CMD_NAMES if n.startswith(text)]
+    try:
+        return _completer.matches[state]
+    except IndexError:
+        return None
+
+
+def setup_readline():
+    """Aktifkan history (↑/↓) + tab-completion command. Non-fatal kalau gak ada readline."""
+    try:
+        import readline
+        try:
+            readline.read_history_file(_HISTORY_FILE)
+        except Exception:
+            pass
+        readline.set_history_length(500)
+        readline.set_completer(_completer)
+        readline.set_completer_delims(" \t\n")
+        readline.parse_and_bind("tab: complete")
+        return True
+    except Exception:
+        return False
+
+
+def save_readline():
+    try:
+        import readline
+        readline.write_history_file(_HISTORY_FILE)
+    except Exception:
+        pass
+
+
+def ask_prompt(model=None, turn=None):
+    """Prompt input readline-aware. ANSI, BUKAN rich markup: input() mencetak
+    prompt mentah apa adanya (markup rich bakal muncul literal)."""
+    tag = f"lethica:{turn}" if turn is not None else "lethica"
+    if sys.stdout.isatty():
+        # \001..\002 = marker "invisible" → readline hitung lebar prompt dgn benar
+        prompt = (f"\001\033[1;35m\002➜ {tag}\001\033[0m\002 "
+                  f"\001\033[35m\002›\001\033[0m\002 ")
+    else:
+        prompt = "lethica> "
+    try:
+        return input(prompt)
+    except EOFError:
+        return "/exit"
+
+
+def err(msg, exc=None):
+    """Error ringkas. Traceback cuma kalau VERBOSE=true."""
+    console.print(f"[bold {c('err')}]✗ {msg}[/bold {c('err')}]")
+    if exc is not None and getattr(config, "VERBOSE", False):
+        import traceback
+        console.print(f"[{c('muted')}]{traceback.format_exc()}[/{c('muted')}]")
+
+
+def tool_line(labels, ok=True, limit=6):
+    """Satu baris ringkas aksi tool: ⚙ read_file · search_content ✓ (v3.8)."""
+    labels = [str(x) for x in (labels or []) if x]
+    if not labels:
+        return
+    shown = " · ".join(labels[:limit])
+    more = f" +{len(labels) - limit}" if len(labels) > limit else ""
+    mark = f"[{c('ok')}]✓[/{c('ok')}]" if ok else f"[{c('err')}]✗[/{c('err')}]"
+    console.print(f"[{c('muted')}]⚙ {shown}{more}[/{c('muted')}] {mark}")
 
 
 # ── Provider / model selectors ──────────────────────────────────────
@@ -57,10 +230,12 @@ def select_provider(current=None):
         console.print("[bold red]Gak ada provider di config.toml [providers.*][/bold red]")
         return None
 
-    table = Table(title="🔌 Providers (config.toml)", show_header=True, header_style="bold magenta")
-    table.add_column("#", style="cyan", width=4)
-    table.add_column("Provider", style="green")
-    table.add_column("Base", style="dim")
+    table = Table(title="🔌 Providers (config.toml)", box=box.SIMPLE_HEAD,
+                  show_header=True, header_style=f"bold {c('brand')}",
+                  border_style=c("muted"), padding=(0, 1))
+    table.add_column("#", style=c("accent"), width=3, no_wrap=True)
+    table.add_column("Provider", style=c("ok"), no_wrap=True)
+    table.add_column("Base", style=c("muted"), overflow="fold")
     for i, n in enumerate(names, 1):
         p = config.get_provider(n)
         mark = " ← aktif" if n == current else ""
@@ -68,7 +243,10 @@ def select_provider(current=None):
     table.add_row(str(len(names) + 1), "[white]✏ add new…[/white]", "")
     console.print(table)
 
-    choice = Prompt.ask(f"[bold yellow]Pick provider (1-{len(names) + 1})[/bold yellow]", default="1")
+    choice = Prompt.ask(f"[bold {c('warn')}]Pick provider (1-{len(names) + 1}, Enter=batal)[/bold {c('warn')}]",
+                        default="")
+    if not choice.strip():
+        return None
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(names):
@@ -153,7 +331,13 @@ def _probe_provider(p):
         console.print(f"[bold green]✓ probe OK — {n_models} model tersedia[/bold green]")
 
 
-def select_model(client):
+def select_model(client, current=None, auto=False):
+    """Pilih model.
+    auto=True  (startup)  → pakai `current`/DEFAULT_MODEL tanpa scan jaringan +
+                            prompt. Hemat 1 request + waktu tiap start (v3.8).
+    auto=False (/model)   → scan provider + tabel interaktif."""
+    if auto:
+        return current or config.DEFAULT_MODEL
     console.print(f"\n[bold cyan]Scanning models dari [yellow]{client.base}[/yellow]...[/bold cyan]")
     try:
         models = client.models()
@@ -162,21 +346,26 @@ def select_model(client):
         models = [config.DEFAULT_MODEL]
     models = [m for m in models if m][:20]
 
-    table = Table(title="📚 Available Models", show_header=True, header_style="bold magenta")
-    table.add_column("#", style="cyan", width=4)
-    table.add_column("Model", style="green")
+    table = Table(title="📚 Available Models", box=box.SIMPLE_HEAD,
+                  show_header=True, header_style=f"bold {c('brand')}",
+                  border_style=c("muted"), padding=(0, 1))
+    table.add_column("#", style=c("accent"), width=3, no_wrap=True)
+    table.add_column("Model", style=c("ok"), overflow="fold")
     for i, m in enumerate(models, 1):
         table.add_row(str(i), m)
     table.add_row(str(len(models) + 1), "[white]✏ custom name[/white]")
     console.print(table)
 
-    choice = Prompt.ask(f"[bold yellow]Pick model (1-{len(models) + 1})[/bold yellow]", default="1")
+    choice = Prompt.ask(f"[bold {c('warn')}]Pick model (1-{len(models) + 1}, Enter=keep)[/bold {c('warn')}]",
+                        default="")
+    if not choice.strip():
+        return current or (models[0] if models else config.DEFAULT_MODEL)
     try:
         idx = int(choice) - 1
         if 0 <= idx < len(models):
             return models[idx]
         if idx == len(models):
-            return Prompt.ask("[bold yellow]Custom model name[/bold yellow]")
+            return Prompt.ask(f"[bold {c('warn')}]Custom model name[/bold {c('warn')}]")
     except Exception:
         pass
     return models[0] if models else config.DEFAULT_MODEL

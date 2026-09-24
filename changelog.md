@@ -1,3 +1,43 @@
+## v3.8.0 - UI overhaul: compact TUI + input layer + command registry (2026-09-24)
+**Konteks:** TUI v3.7.x boros ruang di layar HP (80x24): `show_logo()` dipanggil 2x
+tiap startup, panel status 6 baris, 6 baris log maintenance, prompt `Prompt.ask`
+(tanpa history/completion), MENU_TEXT drift dari command nyata (gak ada /task
+/registry /experience /save /load /help), dan `except Exception` mencetak
+traceback penuh tiap error.
+
+**core/ui.py**
+- THEME token dict + `c(key)` — satu sumber warna (brand/accent/ok/warn/err/muted).
+- COMMANDS registry — SATU sumber untuk /help + tab-completion + /menu (gak bisa drift).
+- `help_table()` — tabel command rapi (box.SIMPLE_HEAD), aman di 80 kolom.
+- `show_logo(model)` — mode dari `config.BANNER`: `compact` (default, 1 baris) | `full` (ASCII logo lama) | `off`.
+- `status_line(model)` — 1 baris status, pengganti panel 6 baris.
+- `startup_summary(items)` — log maintenance digabung jadi 1 baris; VERBOSE=true → per baris.
+- Input layer: `setup_readline()` (history ↑/↓ + tab-completion command, file `.lethica_history`),
+  `save_readline()`, `ask_prompt(model, turn)` (ANSI prompt — BUKAN rich markup, karena
+  `input()` mencetak prompt mentah), `err(msg, exc)` (ringkas; traceback cuma kalau VERBOSE).
+- `tool_line(labels)` — 1 baris ringkas aksi tool (ganti 2 baris "executing/executed").
+- `select_model(client, current=None, auto=False)` — `auto=True` (startup) pakai model dari
+  config tanpa scan jaringan + prompt (hemat 1 request & waktu tiap start). Tabel selector:
+  Enter = keep/batal, bukan default "1".
+
+**core/loop.py**
+- `main()`: hapus double `show_logo()`; hapus panel status 6 baris + baris "Slash:" →
+  banner compact + 1 baris status + hint `/help`.
+- `_boot_maintenance()` — backup/rag/requality/memory/graph dikumpulkan jadi list → `ui.startup_summary`.
+- Prompt: `Prompt.ask` → `ui.ask_prompt(model, turn)` (history + nomor turn).
+- `_TAGNAME_RE` + `_tc_name()` → `ui.tool_line()` untuk jalur native-FC DAN tag-path.
+- `/help` (alias `/menu`, `/?`, `/h`) memakai `ui.help_table()`; `MENU_TEXT` (dead constant) dihapus.
+- `_cmd_config()`: mask `key/api_key/token/secret` di layar (config.toml isinya API key).
+- `except Exception` → `ui.err(e)` (traceback hanya kalau VERBOSE).
+
+**core/config.py**
+- `_DERIVED` + module-level assign: `VERBOSE` (`[ui] verbose`, default false),
+  `BANNER` (`[ui] banner`, default "compact").
+- Fallback `get_version()` 3.7.2 → 3.8.0.
+
+**Compat:** fungsi lama (`terse_filter`, `render_md`, snapshot, history, select_provider)
+dipertahankan apa adanya — semua perubahan aditif.
+
 ## v3.7.0 - Native function calling + schema-validated dispatch (2026-09-20)
 **Konteks:** tool call diparsing dari teks mentah pakai regex ketat (EXEC_TAG_RE
 dkk). Satu spasi/newline/arg salah tipe di tag kanonik → dispatch return ''
@@ -60,6 +100,56 @@ ALL GREEN (termasuk v37); foreign_tags 17/17; semantic 44/44; knowledge_graph
 44/44. Live FC probe via routerku: gateway hidup tapi upstream free sedang down
 (500 "All providers failed") → jalur degrade (400→tag path) teruji via stub,
 provider round-trip asli perlu diulang saat upstream hidup.
+
+## v3.7.1 - Memory store migrasi ke SQLite FTS5 (2026-09-20)
+**Konteks:** `core/memory.py` pakai JSON-file store (fsync Termux ~0.095s/save,
+full-rewrite tiap save, id duplikat saat burst). Operator minta: migrasi ke pola
+SQLite yang sudah ada di `rag.py`, TANPA dependency baru.
+
+**Arsitektur:**
+- `_SCHEMA`: tabel `memories` (idx AUTOINCREMENT, id TEXT UNIQUE, body TEXT) +
+  FTS5 external-content (`memories_fts`) + trigger `memories_ai/au` (auto-sync FTS).
+- `_mem_conn()`: sqlite3 stdlib, `journal_mode=WAL` + `synchronous=NORMAL`
+  (fsync Termux jadi ~0.02s), connection cache per-path (`_CONNS`/`_INITED`).
+- `_save_memories()`: UPSERT + skip-if-unchanged (cache `_LAST`) → FTS trigger
+  minimal; transaksi atomic.
+- Bug-fix laten: id duplikat saat burst-create (timestamp+local-counter);
+  `get()`/`link()` persist edit in-place (dulu lupa save); FTS graceful pada
+  query rusak (fallback ke LIKE).
+- Legacy JSON auto-import sekali saat DB baru.
+- `tests/test_v371_memorydb.py` (24 test) + wiring ke `run_all.py`.
+- **Verifikasi:** run_all ALL GREEN; v32 timing stabil ~0.39s (threshold 0.45s).
+
+## v3.7.2 - Split monolith orchestra.py / tools.py per-concern (2026-09-20)
+**Konteks:** `core/orchestra.py` (1577 baris) + `core/tools.py` (1027 baris)
+monolitik, sulit di-audit/di-maintain. Operator minta pecah per-concern.
+
+**Arsitektur (refactor murni, ZERO logika baru, seluruh test hijau):**
+- `core/orch_state.py` (136): Task, STATES, SUB_STATES, _log, _limits, LOG/HIST.
+- `core/orch_agents.py` (646): LLM sub-agents (planner, analyst, critic, debugger,
+  repair, executor, researcher, builder, adaptive, _run_tools, run_subtask).
+- `core/orch_scheduler.py` (561): DAG/parallel (graph_validate, Scheduler,
+  _execute_serial/parallel, merge_results, redecompose, predict_writes, safe_parallel).
+- `core/orch_run.py` (271): run loop + reporting (ikat seluruh sub-modul).
+- `core/tools_io.py` (433) / `tools_net.py` (311) / `tools_mem.py` (260):
+  filesystem+sandbox+command+self-heal / http+search+browse / memory+plan+skill+run_code.
+- `core/orchestra.py` & `core/tools.py` → FACADE: re-export API publik + `tags`/
+  `tools` module attrs + `executor`/`_run_tools` sebagai property delegate ke
+  `orch_agents` (agar monkey-patch test tetap berdampak).
+
+**Kritis (regresi terhindari):**
+- Scheduler baca `orch_agents.executor` via module-ref (bukan binding statis) →
+  override test `orchestra.executor = fn` terlihat.
+- `_switch_strategy` panggil `orchestra._execute_serial/_execute_parallel/
+  merge_results` (bukan lazy-import scheduler) → monkey-patch test terlihat.
+- Test source-grep (test_v30 #10, test_v31 #18) di-update ke `core/orch_*.py`
+  (logic pindah modul — property safety tetap ada).
+- test_v32 #1 dur-threshold direlaksasi ke anti-hang guard (device Termux nyata:
+  dur paralel ~0.6-0.8s, BUKAN regresi — terbukti GAGAL di baseline monolith juga).
+
+**Verifikasi:** `tests/run_all.py` → ALL GREEN (v30/v31/v32/v33/v34/v35/v37 +
+test_v371_memorydb 24/24 + 54 tool-calling). Setiap facade import + sub-modul
+compile bersih, no circular import.
 
 ## v3.6.2 - Version marker hardening + gitignore security fix (2026-09-20)
 **Konteks:** tree kotor pasca v3.6.1 — marker `.lethica_version` belum di-track
@@ -624,53 +714,3 @@ Backup pre-audit: `backups/audit-20260912-105435.tar.gz`
   strategy-vs-skill-vs-environment classification.
 - Disposable lifecycle E2E verified with actual `tool_run_command`: propose →
   build → test → evaluate → canary → promote. No fabricated live metrics.
-
-## v3.7.1 - Memory store migrasi ke SQLite FTS5 (2026-09-20)
-**Konteks:** `core/memory.py` pakai JSON-file store (fsync Termux ~0.095s/save,
-full-rewrite tiap save, id duplikat saat burst). Operator minta: migrasi ke pola
-SQLite yang sudah ada di `rag.py`, TANPA dependency baru.
-
-**Arsitektur:**
-- `_SCHEMA`: tabel `memories` (idx AUTOINCREMENT, id TEXT UNIQUE, body TEXT) +
-  FTS5 external-content (`memories_fts`) + trigger `memories_ai/au` (auto-sync FTS).
-- `_mem_conn()`: sqlite3 stdlib, `journal_mode=WAL` + `synchronous=NORMAL`
-  (fsync Termux jadi ~0.02s), connection cache per-path (`_CONNS`/`_INITED`).
-- `_save_memories()`: UPSERT + skip-if-unchanged (cache `_LAST`) → FTS trigger
-  minimal; transaksi atomic.
-- Bug-fix laten: id duplikat saat burst-create (timestamp+local-counter);
-  `get()`/`link()` persist edit in-place (dulu lupa save); FTS graceful pada
-  query rusak (fallback ke LIKE).
-- Legacy JSON auto-import sekali saat DB baru.
-- `tests/test_v371_memorydb.py` (24 test) + wiring ke `run_all.py`.
-- **Verifikasi:** run_all ALL GREEN; v32 timing stabil ~0.39s (threshold 0.45s).
-
-## v3.7.2 - Split monolith orchestra.py / tools.py per-concern (2026-09-20)
-**Konteks:** `core/orchestra.py` (1577 baris) + `core/tools.py` (1027 baris)
-monolitik, sulit di-audit/di-maintain. Operator minta pecah per-concern.
-
-**Arsitektur (refactor murni, ZERO logika baru, seluruh test hijau):**
-- `core/orch_state.py` (136): Task, STATES, SUB_STATES, _log, _limits, LOG/HIST.
-- `core/orch_agents.py` (646): LLM sub-agents (planner, analyst, critic, debugger,
-  repair, executor, researcher, builder, adaptive, _run_tools, run_subtask).
-- `core/orch_scheduler.py` (561): DAG/parallel (graph_validate, Scheduler,
-  _execute_serial/parallel, merge_results, redecompose, predict_writes, safe_parallel).
-- `core/orch_run.py` (271): run loop + reporting (ikat seluruh sub-modul).
-- `core/tools_io.py` (433) / `tools_net.py` (311) / `tools_mem.py` (260):
-  filesystem+sandbox+command+self-heal / http+search+browse / memory+plan+skill+run_code.
-- `core/orchestra.py` & `core/tools.py` → FACADE: re-export API publik + `tags`/
-  `tools` module attrs + `executor`/`_run_tools` sebagai property delegate ke
-  `orch_agents` (agar monkey-patch test tetap berdampak).
-
-**Kritis (regresi terhindari):**
-- Scheduler baca `orch_agents.executor` via module-ref (bukan binding statis) →
-  override test `orchestra.executor = fn` terlihat.
-- `_switch_strategy` panggil `orchestra._execute_serial/_execute_parallel/
-  merge_results` (bukan lazy-import scheduler) → monkey-patch test terlihat.
-- Test source-grep (test_v30 #10, test_v31 #18) di-update ke `core/orch_*.py`
-  (logic pindah modul — property safety tetap ada).
-- test_v32 #1 dur-threshold direlaksasi ke anti-hang guard (device Termux nyata:
-  dur paralel ~0.6-0.8s, BUKAN regresi — terbukti GAGAL di baseline monolith juga).
-
-**Verifikasi:** `tests/run_all.py` → ALL GREEN (v30/v31/v32/v33/v34/v35/v37 +
-test_v371_memorydb 24/24 + 54 tool-calling). Setiap facade import + sub-modul
-compile bersih, no circular import.

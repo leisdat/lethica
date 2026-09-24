@@ -123,7 +123,7 @@ def get_version():
                 return v
     except Exception:
         pass
-    return "3.7.2"
+    return "3.8.0"
 
 
 VERSION = get_version()
@@ -148,6 +148,9 @@ _DERIVED = [
     ("SHOW_REASONING",   ("model", "show_reasoning", False)),
     ("AUTOLOAD_SKILLS",  ("skills", "autoload", []), list),
     ("NATIVE_FC",        ("model", "native_function_calling", True)),
+    # v3.8 UI
+    ("VERBOSE",          ("ui", "verbose", False)),
+    ("BANNER",           ("ui", "banner", "compact"), str),
 ]
 
 
@@ -182,6 +185,7 @@ HTTP_TIMEOUT, SEARCH_LIMIT, DANGER_CONFIRM = _d0["HTTP_TIMEOUT"], _d0["SEARCH_LI
 FAILOVER_CHAIN, STREAM, SHOW_REASONING = _d0["FAILOVER_CHAIN"], _d0["STREAM"], _d0["SHOW_REASONING"]
 AUTOLOAD_SKILLS = _d0["AUTOLOAD_SKILLS"]
 NATIVE_FC = _d0["NATIVE_FC"]
+VERBOSE, BANNER = _d0["VERBOSE"], _d0["BANNER"]
 DAILY_BUDGET, ACTIVE_PROVIDER, VERIFIER_MODEL = _d0["DAILY_BUDGET"], _d0["ACTIVE_PROVIDER"], _d0["VERIFIER_MODEL"]
 VERSION = get_version()
 

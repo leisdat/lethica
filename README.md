@@ -4,7 +4,7 @@
 
 ### *The Intelligent Adaptive Knowledge System*
 
-[![Version](https://img.shields.io/badge/version-3.7.0-gold)](https://github.com/leisdat/lethica)
+[![Version](https://img.shields.io/badge/version-3.8.0-gold)](https://github.com/leisdat/lethica)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Status](https://img.shields.io/badge/status-stable-success)](https://github.com/leisdat/lethica/releases)
 
@@ -223,11 +223,17 @@ agent.inject_skill("custom_capability")
 
 See [`changelog.md`](changelog.md) for detailed version history.
 
-### Recent Updates (v3.6.1)
-- ✅ Knowledge Graph fixes + test suite isolation
-- ✅ Enhanced feedback timing (80→3s reduction)
-- ✅ Improved node versioning and conflict detection
-- ✅ Scope isolation for all components
+### Recent Updates (v3.8.0)
+- ✨ **UI overhaul** — compact banner (1 baris), single-line status & startup log
+- ✨ **Input layer** — command history (↑/↓) + tab-completion via readline
+- ✨ **Command registry** — `/help` + completion dari satu sumber (no more drift)
+- ✨ **Startup cepat** — skip scan model jaringan (`select_model(auto=True)`)
+- 🔒 `/config` sekarang mask key/token di layar
+
+**v3.7.x**
+- ✅ Native function calling + schema-validated dispatch (v3.7.0)
+- ✅ Memory store migrasi ke SQLite FTS5 (v3.7.1)
+- ✅ Monolith split: orchestra.py/tools.py per-concern (v3.7.2)
 
 ---
 
