@@ -507,9 +507,7 @@ def _build_app():
     return builder.build()
 
 
-def main():
-    _load_state()  # restore percakapan lintas restart
-    app = _build_app()
+def _register_handlers(app):
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("new", cmd_new))
     app.add_handler(CommandHandler("model", cmd_model))
@@ -517,10 +515,30 @@ def main():
     app.add_handler(CommandHandler("planmode", cmd_planmode))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    print("[lethica-bridge] starting @QMybotai_bot ...")
-    # bootstrap_retries: jangan langsung abort kalau proxy lagi flaky saat start.
-    app.run_polling(drop_pending_updates=True, allowed_updates=["message"],
-                    bootstrap_retries=10)
+
+
+def main():
+    _load_state()  # restore percakapan lintas restart
+    # v3.8.4: self-healing polling loop. Proxy sandbox ke Telegram flaky —
+    # NetworkError/ConnectError dulunya MEMBUNUH proses (30x traceback di log),
+    # user chat tidak dibalas sampai watchdog eksternal restart (bisa >5 mnt).
+    # Sekarang: crash → backoff → rebuild app → polling lagi, di dalam proses.
+    backoff = 10
+    while True:
+        app = _build_app()
+        _register_handlers(app)
+        print("[lethica-bridge] starting @QMybotai_bot ...")
+        try:
+            # bootstrap_retries: jangan langsung abort kalau proxy lagi flaky saat start.
+            app.run_polling(drop_pending_updates=True, allowed_updates=["message"],
+                            bootstrap_retries=10)
+            print("[lethica-bridge] polling berhenti normal — keluar.")
+            break
+        except Exception as e:
+            print(f"[lethica-bridge] polling crash ({type(e).__name__}: {str(e)[:120]}) "
+                  f"— coba lagi dalam {backoff} dtk")
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 300)
 
 
 if __name__ == "__main__":
