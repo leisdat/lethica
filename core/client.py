@@ -153,6 +153,15 @@ class LClient:
                                 stream_cb(delta["reasoning_content"], "reasoning")
                             except Exception:
                                 pass  # UI callback error ≠ network error (v2.8.1 fix: dulu bunuh stream)
+                    # v3.8.1: Dahl/DeepSeek kirim thinking di field "reasoning",
+                    # bukan "reasoning_content" → akumulasi juga
+                    if delta.get("reasoning"):
+                        reasoning += delta["reasoning"]
+                        if stream_cb:
+                            try:
+                                stream_cb(delta["reasoning"], "reasoning")
+                            except Exception:
+                                pass
                     if delta.get("content"):
                         content += delta["content"]
                         if stream_cb:
@@ -221,15 +230,30 @@ class LClient:
                     if console:
                         console.print(f"\n[dim red]✖ {entry} unavailable, failover...[/dim red]")
                     continue
+                # v3.8.1: thinking-only (reasoning tanpa content, tanpa tool_calls)
+                # = respons gagal → failover. Jangan sodorkan trace mentah ke user.
+                if not content and not getattr(cl, "last_tool_calls", None):
+                    if console:
+                        console.print(f"[dim yellow]⚠ {entry} → thinking-only/kosong, failover...[/dim yellow]")
+                    continue
                 self.last_finish_reason = cl.last_finish_reason
                 self.last_tool_calls = getattr(cl, "last_tool_calls", None)
-                return content or reasoning or "(empty reply)", used or m
+                return content or "(empty reply)", used or m
             for attempt in range(3):
                 t0 = time.time()
                 r = cl.chat(m, messages, temperature, max_tokens, timeout, tools=entry_tools)
                 if "error" not in r and r.get("choices"):
                     msg = r["choices"][0]["message"]
-                    reply = msg.get("content") or msg.get("reasoning_content") or "(empty reply)"
+                    content = msg.get("content") or ""
+                    # v3.8.1: Dahl/DeepSeek taruh thinking di field "reasoning".
+                    # Thinking-only / kosong tanpa tool_calls = respons gagal →
+                    # failover ke entry berikutnya (jangan return trace mentah
+                    # atau string palsu "(empty reply)" sebagai jawaban).
+                    if not content and not getattr(cl, "last_tool_calls", None):
+                        if console:
+                            console.print(f"[dim yellow]⚠ {entry} → kosong/thinking-only, failover...[/dim yellow]")
+                        break
+                    reply = content or "(empty reply)"
                     self.last_usage = cl.last_usage
                     _record_usage(m, cl.last_usage, reply, "", messages)
                     self.last_finish_reason = cl.last_finish_reason

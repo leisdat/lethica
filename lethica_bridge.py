@@ -18,6 +18,7 @@ import functools
 import json
 import os
 import re
+import time
 import sys
 import time
 
@@ -143,9 +144,12 @@ def _run_agent_turn(messages, model, user_text, progress_cb=None, plan_approved=
     used = None
     last_reply = None
     # ── PLAN MODE gate: task terdeteksi → susun plan, STOP, tunggu approval ──
+    # v3.8.1: draft_plan return None kalau model gagal total → skip gate,
+    # eksekusi langsung (user minta kerja, bukan pesan error).
     if _planmode.should_draft(user_text, plan_approved=plan_approved):
         plan_text, pused = _planmode.draft_plan(user_text, model, CLIENT)
-        return plan_text, pused, "plan_pending"
+        if plan_text is not None:
+            return plan_text, pused, "plan_pending"
     rounds = max(1, int(lethica.MAX_TOOL_ROUNDS))
     tools_payload = _tooldef.openai_tools() if getattr(lethica.config, "NATIVE_FC", False) else None
     for i in range(rounds):
@@ -156,7 +160,15 @@ def _run_agent_turn(messages, model, user_text, progress_cb=None, plan_approved=
             temperature=lethica.TEMPERATURE, max_tokens=lethica.MAX_TOKENS,
             timeout=lethica.HTTP_TIMEOUT, tools=tools_payload)
         if reply is None:
-            return None, None, "failed"
+            # v3.8.1: transient blip → 1x percobaan ulang sebelum nyerah.
+            # Satu round gagal jangan bunuh seluruh turn.
+            time.sleep(2)
+            reply, used = CLIENT.chat_failover(
+                model, messages, lethica.FAILOVER_CHAIN,
+                temperature=lethica.TEMPERATURE, max_tokens=lethica.MAX_TOKENS,
+                timeout=lethica.HTTP_TIMEOUT, tools=tools_payload)
+            if reply is None:
+                return None, None, "failed"
         if getattr(CLIENT, "tools_rejected", False) and tools_payload:
             tools_payload = None
         reply = lethica.terse_filter(reply)

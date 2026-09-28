@@ -77,7 +77,10 @@ def check_approval(text):
 
 def draft_plan(user_text, model=None, client=None, context=""):
     """Satu panggilan LLM → rencana langkah bernomor. Simpan via tool_plan.
-    Return (plan_text, used_model). Tidak mutasi messages caller."""
+    Return (plan_text, used_model). Tidak mutasi messages caller.
+    v3.8.1: retry 2x kalau respons kosong (model lagi flaky). Kalau tetap
+    gagal → return (None, used): caller harus SKIP plan gate dan eksekusi
+    langsung (jangan sodorkan "(empty reply)" ke user)."""
     cl = client or client_mod.LClient()
     model = model or config.DEFAULT_MODEL
     sys = ("Kamu perencana task untuk AI agent. Buatkan RENCANA KERJA bernomor "
@@ -89,10 +92,21 @@ def draft_plan(user_text, model=None, client=None, context=""):
     msgs = [{"role": "system", "content": sys},
             {"role": "user",
              "content": f"GOAL:\n{user_text}\n\n{f'KONTEKS TAMBAHAN:\n{context}' if context else ''}"}]
-    reply, used = cl.chat_failover(
-        model, msgs, config.FAILOVER_CHAIN,
-        timeout=min(config.HTTP_TIMEOUT, 90), temperature=0.3, max_tokens=1200)
-    plan_text = (reply or "").strip() or "(gagal menyusun plan)"
+    reply, used = None, None
+    for _ in range(3):
+        try:
+            reply, used = cl.chat_failover(
+                model, msgs, config.FAILOVER_CHAIN,
+                timeout=min(config.HTTP_TIMEOUT, 90), temperature=0.3, max_tokens=1200)
+        except Exception:
+            reply, used = None, used
+        plan_text = (reply or "").strip()
+        if plan_text and plan_text != "(empty reply)":
+            break
+    else:
+        plan_text = ""
+    if not plan_text:
+        return None, used  # draft gagal total → caller skip plan gate
     try:
         tools.tool_plan("save", f"Goal: {user_text[:200]}\n\n{plan_text}")
     except Exception:

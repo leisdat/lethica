@@ -72,6 +72,24 @@ try:
 finally:
     planmode.tools.tool_plan = _saved_tool_plan
 
+# ── 2b. draft_plan gagal total → (None, _) supaya caller skip plan gate ──
+class _StubClientEmpty:
+    def chat_failover(self, model, messages, chain, **kw):
+        return ("(empty reply)", "stub-model")
+
+class _StubClientNone:
+    def chat_failover(self, model, messages, chain, **kw):
+        return (None, None)
+
+planmode.tools.tool_plan = lambda a, c=None: "OK stub"
+try:
+    pt, pu = planmode.draft_plan("buatkan bot", client=_StubClientEmpty())
+    check("4.3 draft_plan empty konsisten → None (skip gate)", pt is None)
+    pt2, pu2 = planmode.draft_plan("buatkan bot", client=_StubClientNone())
+    check("4.4 draft_plan None → None (skip gate)", pt2 is None)
+finally:
+    planmode.tools.tool_plan = _saved_tool_plan
+
 # ── 3. spawn: parsing tasks ──────────────────────────────────────────
 p1 = tools._parse_spawn_tasks('[{"name":"a","task":"kerjakan x"},{"name":"b","task":"kerjakan y"}]')
 check("5.1 parse JSON list", len(p1) == 2 and p1[0]["name"] == "a" and p1[1]["task"] == "kerjakan y")
