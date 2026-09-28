@@ -190,7 +190,7 @@ def _run_agent_turn(messages, model, user_text, progress_cb=None):
 async def _agent_turn(chat_id, user_text, progress_cb=None):
     """Jalankan agent loop (sinkron, di thread executor) → return final text."""
     state = _chat(chat_id)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         None,
         functools.partial(_run_agent_turn, state["messages"], state["model"],
@@ -278,6 +278,8 @@ async def on_text(update: Update, ctx):
     # pesan status progress (di-update tiap tool-round)
     status_msg = await update.message.reply_text("🤖 memproses…", parse_mode=None)
     last_edit = [0.0]
+    # loop aktif (PTB v22: Application.loop sudah dihapus, ambil dari coroutine ini)
+    _loop = asyncio.get_running_loop()
 
     def _progress(round_idx, kind, used):
         now = time.time()
@@ -290,7 +292,7 @@ async def on_text(update: Update, ctx):
         else:
             txt = f"{icon} round {round_idx+1}: jalanin tool ({used})…"
         asyncio.run_coroutine_threadsafe(
-            _edit_or_send(update, status_msg, txt), ctx.application.loop)
+            _edit_or_send(update, status_msg, txt), _loop)
 
     try:
         final, used = await _agent_turn(chat_id, user_text, _progress)
