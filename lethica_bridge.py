@@ -535,6 +535,12 @@ def main():
             print("[lethica-bridge] polling berhenti normal — keluar.")
             break
         except Exception as e:
+            # v3.8.4b: Conflict = ada instance lain yang polling (double-start).
+            # Retry TIDAK PERNAH membantu di kasus ini — malah bikin dua
+            # instance gelut selamanya. Keluar, biar watchdog yang bereskan.
+            if "Conflict" in type(e).__name__ or "terminated by other getUpdates" in str(e):
+                print(f"[lethica-bridge] Conflict: instance lain sedang polling — keluar.")
+                break
             print(f"[lethica-bridge] polling crash ({type(e).__name__}: {str(e)[:120]}) "
                   f"— coba lagi dalam {backoff} dtk")
             time.sleep(backoff)
