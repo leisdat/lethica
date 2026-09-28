@@ -133,13 +133,20 @@ TOOL_DEFS = {
             "action": (("show", "list", "search"), False, "Aksi skill, default show"),
             "file": ("string", False, "File pendukung dalam skill"),
         }),
+    "spawn": dict(
+        fn="tool_spawn", icon="🚀", aliases=("subagent", "subagents", "spawn_subagents"),
+        desc="Sub-agent paralel: delegasikan subtask independen ke N agent mini yang jalan bareng; hasil diagregat otomatis.",
+        params={
+            "tasks": ("string", True, "JSON [{\"name\":\"a\",\"task\":\"...\"}] atau baris 'nama: task'"),
+            "max_rounds": ("integer", False, "Max tool rounds per sub-agent, default 4"),
+        }),
 }
 
 # Urutan eksekusi antar-tipe = urutan dispatch historis tags.py
 # (read dulu, exec belakangan — determinisme output dipertahankan).
 EXEC_ORDER = ["read_file", "write_file", "edit_file", "list_dir", "search_content",
               "http_request", "download_file", "web_search", "browse", "memory",
-              "plan", "rag", "exec", "run_code", "task", "skill"]
+              "plan", "rag", "exec", "run_code", "task", "spawn", "skill"]
 _ORDER_RANK = {n: i for i, n in enumerate(EXEC_ORDER)}
 
 _BOOL_TRUE = {"true", "1", "yes", "y", "on"}

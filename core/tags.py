@@ -8,7 +8,8 @@ from core.ui import console
 
 # v2.5 fix: TAG_NAMES sekarang SATU sumber, include 'rag' (sebelumnya kelupaan)
 TAG_NAMES = ["memory", "plan", "browse", "web_search", "read_file", "write_file",
-             "list_dir", "search_content", "http_request", "download_file", "rag", "run_code", "task"]
+             "list_dir", "search_content", "http_request", "download_file", "rag", "run_code", "task",
+             "spawn"]
 
 
 def _fix_attr_quotes(reply):
@@ -364,7 +365,7 @@ def looks_like_tool_attempt(reply):
         return True
     # v3.7: opener tag kanonik (canonical + skill) yang tidak menghasilkan output
     _CANON = "memory|plan|browse|web_search|read_file|write_file|list_dir|" \
-             "search_content|http_request|download_file|rag|run_code|task|skill"
+             "search_content|http_request|download_file|rag|run_code|task|skill|spawn"
     return bool(re.search(rf"<\s*(?:{_CANON})\b", r, re.IGNORECASE))
 
 
@@ -657,6 +658,11 @@ def dispatch(reply, agent_path):
         file = a.get('file')
         _act("🎯", "skill", name or action)
         outputs.append(f"[skill]\n{tools.tool_skill(name, action, file)}")
+    for m in tools.SPAWN_TAG_RE.finditer(reply):
+        matched.append((m.start(), m.end()))
+        a = _parse_tag_attrs(m.group(1))
+        _act("🚀", "spawn", (a.get('tasks') or '')[:60])
+        outputs.append(f"[spawn]\n{tools.tool_spawn(a.get('tasks'), a.get('max_rounds'))}")
     # ── v3.7 salvage stage: tag kanonik yang regex ketat stage-1 lewatkan ──
     try:
         _salvage_unparsed(reply, agent_path, matched, outputs)

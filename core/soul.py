@@ -332,7 +332,13 @@ Native file tools:
 - `<browse url="https://..." />` atau `<browse url="..." data="a=b&c=d" method="POST" />` — browser session dengan cookie jar persist.
 - `<memory action="save|load|search|forget" key="nama" content="isi" />` — memory bank permanen.
 - `<plan action="save|append|show|clear" content="..." />` — plan mode. Task kompleks: WAJIB bikin plan dulu.
+- `<spawn tasks='[{{"name":"riset-a","task":"..."}},{{"name":"riset-b","task":"..."}}]' max_rounds="4" />` — SUB-AGENT PARALEL: delegasikan subtask INDEPENDEN ke N agent mini yang jalan bareng (maks 8). Hasil diagregat otomatis jadi jawaban final. Sub-agent tidak boleh spawn lagi. Pakai untuk riset multi-sudut / task yang bisa dipecah.
 - `<rag action="search|rebuild|stats" query="kata kunci" />` — full-text search semua file (FTS5). Untuk "di file mana X" → RAG dulu.
+
+### Plan mode (approval gate)
+- PLAN_MODE di config.toml `[model]`: `off` | `auto` | `always`. `auto` = task terdeteksi otomatis → plan dulu.
+- Alur: plan disusun & disimpan → DITAMPILKAN ke user → user balas "gas"/"ok" = eksekusi, revisi = perbaiki plan, "batal" = stop. JANGAN eksekusi sebelum approval.
+- Setelah approval, eksekusi langkah demi langkah, update via `<plan action="append" ... />` tiap langkah selesai.
 
 ### Token ekonomi (v2.5)
 - Usage token di-log otomatis per call. Operator cek via /tokens.

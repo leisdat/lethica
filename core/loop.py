@@ -112,6 +112,26 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
     max_cont = config.MAX_CONTINUE_ROUNDS
     cl = client or _active_client()
     learning.begin_turn()
+    # ── PLAN MODE gate: task terdeteksi → susun plan → minta approval user ──
+    from core import planmode as _planmode
+    _user_text = ""
+    for _m in reversed(messages):
+        if _m.get("role") == "user" and (_m.get("content") or "").strip():
+            _user_text = _m["content"]
+            break
+    if _planmode.should_draft(_user_text):
+        plan_text, pused = _planmode.draft_plan(_user_text, model, cl)
+        console.print(_panel(f"📋 [bold]PLAN (butuh approval)[/bold]\n\n{plan_text}",
+                             pused or model))
+        try:
+            _ok = Confirm.ask("Gas eksekusi plan ini?", default=True)
+        except Exception:
+            _ok = True
+        if not _ok:
+            tools.tool_plan("clear")
+            return "Plan dibatalkan user.", pused
+        messages.append({"role": "user", "content": _planmode.approval_message(plan_text)})
+        console.print("[dim green]✓ plan disetujui → eksekusi[/dim green]")
     had_tools = False
     reply, used = None, None
     tool_rounds = 0
@@ -186,7 +206,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
         # v2.9.5: cuma bilang "executing tools" kalau reply MEMANG punya tool call
         _has_tag = bool(re.search(r"<(?:invoke|read_file|write_file|edit_file|list_dir|"
                                   r"search_content|http_request|download_file|web_search|browse|"
-                                  r"memory|plan|rag|skill|task|tool_call)", reply or "", re.I))
+                                  r"memory|plan|rag|skill|task|tool_call|spawn)", reply or "", re.I))
         if _has_tag:
             console.print(f"[dim]⚙ executing tools for {used}...[/dim]")
         out = tags.dispatch(reply, config.SELF_PATH)

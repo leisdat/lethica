@@ -70,6 +70,7 @@ DL_TAG_RE = re.compile(
 )
 MEMORY_TAG_RE = re.compile(r'<memory\s+([^>]*?)/?>', re.IGNORECASE)
 PLAN_TAG_RE = re.compile(r'<plan\s+([^>]*?)/?>', re.IGNORECASE)
+SPAWN_TAG_RE = re.compile(r'<spawn\s+([^>]*?)/?>', re.IGNORECASE)
 WEBSEARCH_TAG_RE = re.compile(r'<web_search\s+([^>]*?)/?>', re.IGNORECASE)
 BROWSE_TAG_RE = re.compile(r'<browse\s+([^>]*?)/?>', re.IGNORECASE)
 SKILL_TAG_RE = re.compile(r'<skill\s+([^>]*?)/?>', re.IGNORECASE)
@@ -890,6 +891,62 @@ def tool_plan(action, content=None):
     return f"Error plan: unknown action '{action}'."
 
 
+def _parse_spawn_tasks(raw):
+    """Parse arg tasks → list [{"name","task"}].
+    Format 1 (JSON): [{"name":"riset-a","task":"..."}, ...] atau {"tasks":[...]}
+    Format 2 (baris):  nama: task  /  nama | task  (satu subtask per baris)"""
+    import json as _json
+    t = (raw or "").strip()
+    if not t:
+        return []
+    if t.startswith(("[", "{")):
+        try:
+            d = _json.loads(t)
+            if isinstance(d, dict):
+                d = d.get("tasks") or []
+            out = []
+            for i, it in enumerate(d):
+                if isinstance(it, dict) and it.get("task"):
+                    out.append({"name": str(it.get("name") or f"agent-{i+1}"),
+                                "task": str(it["task"])})
+                elif isinstance(it, str) and it.strip():
+                    out.append({"name": f"agent-{i+1}", "task": it.strip()})
+            return out
+        except Exception:
+            pass  # jatuh ke format baris
+    out = []
+    for i, line in enumerate(t.splitlines()):
+        line = line.strip().strip("-*• ").strip()
+        if not line:
+            continue
+        if ":" in line:
+            name, task = line.split(":", 1)
+        elif "|" in line:
+            name, task = line.split("|", 1)
+        else:
+            name, task = f"agent-{i+1}", line
+        name, task = name.strip()[:40] or f"agent-{i+1}", task.strip()
+        if task:
+            out.append({"name": name, "task": task})
+    return out
+
+
+def tool_spawn(tasks=None, max_rounds=None):
+    """Sub-agent paralel: delegasikan subtask independen ke N agent mini."""
+    from core import subagents  # lazy: hindari circular import
+    if subagents.in_subagent():
+        return "[spawn] ERROR: sub-agent tidak boleh spawn lagi (max depth 1)."
+    parsed = _parse_spawn_tasks(tasks)
+    if not parsed:
+        return ("[spawn] ERROR: arg 'tasks' kosong/tidak ke-parse. Format: "
+                "JSON [{\"name\":\"a\",\"task\":\"...\"}] atau baris 'nama: task'.")
+    try:
+        mr = int(max_rounds) if max_rounds else None
+    except (TypeError, ValueError):
+        mr = None
+    return subagents.spawn(parsed, max_rounds=mr)
+
+
 # ── v2.9: skill loader (Hermes skills di ~/lethica/skills/) ──
 SKILL_DIR = os.path.join(config.LETHICA_DIR, "skills")
 # index nama->path di-build sekali
@@ -1025,6 +1082,7 @@ tool_web_search = stats.wrap("web_search", tool_web_search)
 tool_browse = stats.wrap("browse", tool_browse)
 tool_memory = stats.wrap("memory", tool_memory)
 tool_plan = stats.wrap("plan", tool_plan)
+tool_spawn = stats.wrap("spawn", tool_spawn)
 tool_skill = stats.wrap("skill", tool_skill)
 tool_run_code = stats.wrap("run_code", tool_run_code)
 
