@@ -155,18 +155,27 @@ def _run_agent_turn(messages, model, user_text, progress_cb=None, plan_approved=
     for i in range(rounds):
         if progress_cb:
             progress_cb(i, "thinking", None)
+        t_call = time.time()
+        # v3.8.3: pakai jalur STREAMING (stream_cb) — guard first-data 30 dtk
+        # & total 90 dtk per leg berlaku. Jalur non-streaming bisa ngegantung
+        # 60 dtk × 3 attempt per model = ratusan detik per round.
         reply, used = CLIENT.chat_failover(
             model, messages, lethica.FAILOVER_CHAIN,
             temperature=lethica.TEMPERATURE, max_tokens=lethica.MAX_TOKENS,
-            timeout=lethica.HTTP_TIMEOUT, tools=tools_payload)
+            timeout=lethica.HTTP_TIMEOUT, tools=tools_payload,
+            stream_cb=lambda delta, kind: None)
         if reply is None:
             # v3.8.1: transient blip → 1x percobaan ulang sebelum nyerah.
-            # Satu round gagal jangan bunuh seluruh turn.
-            time.sleep(2)
-            reply, used = CLIENT.chat_failover(
-                model, messages, lethica.FAILOVER_CHAIN,
-                temperature=lethica.TEMPERATURE, max_tokens=lethica.MAX_TOKENS,
-                timeout=lethica.HTTP_TIMEOUT, tools=tools_payload)
+            # v3.8.3: retry HANYA kalau gagal CEPAT (<45 dtk, kemungkinan blip).
+            # Kalau sudah bakar puluhan detik (model hang), retry langsung
+            # cuma menggandakan penderitaan → nyerah, user bisa coba lagi.
+            if time.time() - t_call < 45:
+                time.sleep(2)
+                reply, used = CLIENT.chat_failover(
+                    model, messages, lethica.FAILOVER_CHAIN,
+                    temperature=lethica.TEMPERATURE, max_tokens=lethica.MAX_TOKENS,
+                    timeout=lethica.HTTP_TIMEOUT, tools=tools_payload,
+                    stream_cb=lambda delta, kind: None)
             if reply is None:
                 return None, None, "failed"
         if getattr(CLIENT, "tools_rejected", False) and tools_payload:

@@ -143,6 +143,9 @@ _DERIVED = [
     ("WINDOW_SIZE",     ("model", "window_size", 17), int),
     ("PERSONA_MODE",    ("persona", "mode", "bypass"), str),
     ("HTTP_TIMEOUT",    ("tools", "http_timeout", 60), int),
+    ("FIRST_DATA_TIMEOUT", ("tools", "first_data_timeout", 30), int),
+    ("LEG_TOTAL_TIMEOUT",  ("tools", "leg_total_timeout", 90), int),
+    ("ENTRY_BUDGET",       ("tools", "entry_budget", 90), int),
     ("SEARCH_LIMIT",    ("tools", "search_limit", 5), int),
     ("DANGER_CONFIRM",  ("tools", "danger_confirm", True)),
     ("FAILOVER_CHAIN",  ("model", "failover", ["Free-All", "Free-Kombo", "L"])),
@@ -184,6 +187,8 @@ DEFAULT_BASE, API_KEY, DEFAULT_MODEL = _d0["DEFAULT_BASE"], _d0["API_KEY"], _d0[
 MAX_TOKENS, TEMPERATURE, MAX_TOOL_ROUNDS, MAX_CONTINUE_ROUNDS = _d0["MAX_TOKENS"], _d0["TEMPERATURE"], _d0["MAX_TOOL_ROUNDS"], _d0["MAX_CONTINUE_ROUNDS"]
 WINDOW_SIZE, PERSONA_MODE = _d0["WINDOW_SIZE"], _d0["PERSONA_MODE"]
 HTTP_TIMEOUT, SEARCH_LIMIT, DANGER_CONFIRM = _d0["HTTP_TIMEOUT"], _d0["SEARCH_LIMIT"], _d0["DANGER_CONFIRM"]
+FIRST_DATA_TIMEOUT = _d0["FIRST_DATA_TIMEOUT"]
+LEG_TOTAL_TIMEOUT, ENTRY_BUDGET = _d0["LEG_TOTAL_TIMEOUT"], _d0["ENTRY_BUDGET"]
 FAILOVER_CHAIN, STREAM, SHOW_REASONING = _d0["FAILOVER_CHAIN"], _d0["STREAM"], _d0["SHOW_REASONING"]
 AUTOLOAD_SKILLS = _d0["AUTOLOAD_SKILLS"]
 PLAN_MODE = _d0["PLAN_MODE"]

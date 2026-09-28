@@ -113,8 +113,20 @@ class LClient:
         self.last_tool_calls = None
         self.last_status = None
         try:
+            t_start = time.time()
+            got_data = False
             with urllib.request.urlopen(req, timeout=timeout or config.HTTP_TIMEOUT) as r:
                 for raw in r:
+                    now = time.time()
+                    # v3.8.3: wall-clock guards. Socket timeout (per-recv) TIDAK
+                    # mempan kalau server trickle SSE keepalive (": ping") —
+                    # tanpa guard ini satu leg bisa ngegantung ratusan detik.
+                    if not got_data and now - t_start > config.FIRST_DATA_TIMEOUT:
+                        raise TimeoutError(
+                            f"no SSE data in {config.FIRST_DATA_TIMEOUT}s")
+                    if now - t_start > config.LEG_TOTAL_TIMEOUT:
+                        raise TimeoutError(
+                            f"leg exceeded {config.LEG_TOTAL_TIMEOUT}s")
                     line = raw.decode("utf-8", errors="replace").strip()
                     if not line.startswith("data:"):
                         continue
@@ -125,6 +137,7 @@ class LClient:
                         d = json.loads(payload)
                     except Exception:
                         continue
+                    got_data = True
                     model_used = d.get("model") or model_used
                     if d.get("usage"):
                         usage = d["usage"]
@@ -235,7 +248,12 @@ class LClient:
                 self.last_finish_reason = cl.last_finish_reason
                 self.last_tool_calls = getattr(cl, "last_tool_calls", None)
                 return content or "(empty reply)", used or m
+            # v3.8.3: entry budget — tanpa ini 3 attempt × 60 dtk timeout =
+            # 180 dtk untuk SATU model, ×2 model ×2 (retry bridge) = 720 dtk.
+            entry_t0 = time.time()
             for attempt in range(3):
+                if time.time() - entry_t0 > config.ENTRY_BUDGET:
+                    break  # budget habis → failover, jangan ngegantung
                 t0 = time.time()
                 r = cl.chat(m, messages, temperature, max_tokens, timeout, tools=entry_tools)
                 if "error" not in r and r.get("choices"):
