@@ -21,9 +21,15 @@ import re
 import sys
 import time
 
-LETHICA_DIR = os.path.expanduser("~/lethica")
+# Lokasi repo: dari file ini sendiri (jangan hardcode ~/lethica — di mesin lain crash).
+LETHICA_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, LETHICA_DIR)
 CHATS_FILE = os.path.join(LETHICA_DIR, "workspace", "chats.json")
+
+# Scrub entri bracket IPv6 di no_proxy yang bikin httpx crash ("Invalid port").
+for _var in ("no_proxy", "NO_PROXY"):
+    _v = os.environ.get(_var, "")
+    os.environ[_var] = ",".join(e for e in _v.split(",") if e and not e.startswith("["))
 
 # ── Lethica sebagai library (jangan jalankan TUI main loop) ─────────
 
@@ -301,9 +307,27 @@ async def on_text(update: Update, ctx):
 
 # ── Main ────────────────────────────────────────────────────────────
 
+def _build_app():
+    """Bangun PTB Application dengan dukungan proxy env (penting di sandbox/VPS)."""
+    if not BOT_TOKEN:
+        raise SystemExit(
+            "[lethica-bridge] TELEGRAM_BOT_TOKEN kosong.\n"
+            "  export TELEGRAM_BOT_TOKEN='isi-token-dari-BotFather' dulu.")
+    builder = Application.builder().token(BOT_TOKEN)
+    proxy = (os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+             or os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy"))
+    if proxy:
+        try:
+            builder = builder.proxy(proxy).get_updates_proxy(proxy)
+            print(f"[lethica-bridge] pakai proxy: {proxy[:30]}...")
+        except AttributeError:
+            print("[lethica-bridge] builder.proxy() tidak ada; andalkan env proxy httpx.")
+    return builder.build()
+
+
 def main():
     _load_state()  # restore percakapan lintas restart
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = _build_app()
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("new", cmd_new))
     app.add_handler(CommandHandler("model", cmd_model))
