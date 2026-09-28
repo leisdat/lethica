@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [security, phishing, awareness, simulation, audit, training, red-team]
-    related_skills: [godmode]
+    related_skills: []
 ---
 
 ## When to Use
