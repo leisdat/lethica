@@ -50,7 +50,9 @@ from telegram.constants import ChatAction                      # noqa: E402
 from telegram.ext import (Application, CommandHandler,          # noqa: E402
                           MessageHandler, ContextTypes, filters)
 
-BOT_TOKEN = open(os.path.expanduser("~/.hermes/agent_bot_token")).read().strip()
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "") or (
+    open(os.path.expanduser("~/.hermes/agent_bot_token")).read().strip()
+    if os.path.isfile(os.path.expanduser("~/.hermes/agent_bot_token")) else "")
 MAX_REPLY = 3900          # TG hard cap 4096
 MAX_TURNS_STORED = 12     # conversation memory per chat
 AUTHORIZED = None         # None = semua chat boleh; atau set {user_id} untuk lock
@@ -314,6 +316,13 @@ def _build_app():
             "[lethica-bridge] TELEGRAM_BOT_TOKEN kosong.\n"
             "  export TELEGRAM_BOT_TOKEN='isi-token-dari-BotFather' dulu.")
     builder = Application.builder().token(BOT_TOKEN)
+    # Timeout longgar: koneksi ke Telegram via proxy sandbox sering lambat/flaky.
+    for _m, _v in (("connect_timeout", 30.0), ("read_timeout", 60.0),
+                   ("write_timeout", 60.0), ("pool_timeout", 30.0)):
+        try:
+            builder = getattr(builder, _m)(_v)
+        except AttributeError:
+            pass
     proxy = (os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
              or os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy"))
     if proxy:
@@ -335,7 +344,9 @@ def main():
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     print("[lethica-bridge] starting @QMybotai_bot ...")
-    app.run_polling(drop_pending_updates=True, allowed_updates=["message"])
+    # bootstrap_retries: jangan langsung abort kalau proxy lagi flaky saat start.
+    app.run_polling(drop_pending_updates=True, allowed_updates=["message"],
+                    bootstrap_retries=10)
 
 
 if __name__ == "__main__":

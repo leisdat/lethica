@@ -56,3 +56,7 @@ _live_hello_log.txt
 .DS_Store
 Thumbs.db
 venv/
+.secrets/
+run_bridge.sh
+bridge.log
+ensure-bridge.sh
