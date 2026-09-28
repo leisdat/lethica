@@ -363,4 +363,7 @@ Versi saat ini: v{config.VERSION}
 def build_system_prompt():
     """Assemblage: persona + dynamic blocks + operating rules."""
     soul = _persona_text()
-    return f"{soul}{_memory_block()}{_rag_block()}{_skills_block()}{_plan_block()}\n---\n\n{_operating_rules()}"
+    sp = f"{soul}{_memory_block()}{_rag_block()}{_skills_block()}{_plan_block()}\n---\n\n{_operating_rules()}"
+    # Prompt aslinya ditulis untuk layout Termux (~/lethica). Di mesin lain,
+    # ganti dengan path repo sebenarnya biar agent tidak dikasih path bohong.
+    return sp.replace("~/lethica", config.LETHICA_DIR)

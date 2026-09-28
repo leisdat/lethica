@@ -9,9 +9,9 @@ import shutil
 import sqlite3
 import tempfile
 
-HOME = os.path.expanduser("~")
-sys.path.insert(0, os.path.join(HOME, "lethica"))
-os.chdir(os.path.join(HOME, "lethica"))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+os.chdir(ROOT)
 
 from core import memory as M  # noqa: E402
 
@@ -26,7 +26,7 @@ def check(name, cond, extra=""):
 def fresh_memdir():
     """Dir memori baru + reset cache koneksi (test isolasi per-kasus)."""
     d = tempfile.mkdtemp(prefix="lx-v371-",
-                         dir=os.path.join(HOME, "lethica", "workspace"))
+                         dir=os.path.join(ROOT, "workspace"))
     os.environ["LETHICA_MEM_DIR"] = d
     M.MEM_FILE = os.path.join(d, "memories.json")
     M.EMB_FILE = os.path.join(d, "embeddings.json")

@@ -55,3 +55,4 @@ _live_hello_log.txt
 # OS generated
 .DS_Store
 Thumbs.db
+venv/

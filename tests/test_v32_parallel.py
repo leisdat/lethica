@@ -317,10 +317,11 @@ _td = os.path.join(config.WORKSPACE, "v32_live")
 _prev = getattr(_cfg, "TASK_DIR", None)
 _cfg.TASK_DIR = _td
 try:
+    _WS = config.WORKSPACE  # jangan hardcode ~/lethica — WORKSPACE ikut lokasi repo
     _g = [
-        ("cd ~/lethica/workspace/atria/auto_reg && rm -f diag.log", True),
-        ("cd ~/lethica/workspace/atria/auto_reg && ls -la", True),
-        ("cd ~/lethica/workspace/v32_live && python3 test_calc.py", False),
+        (f"cd {_WS}/atria/auto_reg && rm -f diag.log", True),
+        (f"cd {_WS}/atria/auto_reg && ls -la", True),
+        (f"cd {_td} && python3 test_calc.py", False),
         ("nohup python3 mock_server.py --port 8970", False),
     ]
     _bad = [c for c, want in _g if bool(tools._scope_violation(c)) != want]

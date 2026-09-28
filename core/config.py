@@ -2,9 +2,11 @@
 import os
 
 HOME = os.path.expanduser("~")
-# LETHICA_DIR bisa di-redirect via env (test isolation). Tanpa env = default
-# ~/lethica (backward-compat penuh; production tidak pernah set env ini).
-LETHICA_DIR = os.environ.get("LETHICA_DIR") or os.path.join(HOME, "lethica")
+# LETHICA_DIR: env override (test isolation) > lokasi repo sebenarnya dari __file__
+# > ~/lethica (legacy Termux). Jangan hardcode ~/lethica — di mesin lain semua
+# path (skills, workspace, memory) ngaco dan bikin direktori phantom.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LETHICA_DIR = os.environ.get("LETHICA_DIR") or _REPO_ROOT
 WORKSPACE = os.path.join(LETHICA_DIR, "workspace")
 TASK_DIR = None   # v3.2: scope direktori task aktif (di-set orchestra saat run)
 BACKUP_DIR = os.path.join(LETHICA_DIR, "backups")

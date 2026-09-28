@@ -10,9 +10,9 @@ import sys
 import json
 import tempfile
 
-HOME = os.path.expanduser("~")
-sys.path.insert(0, os.path.join(HOME, "lethica"))
-os.chdir(os.path.join(HOME, "lethica"))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+os.chdir(ROOT)
 
 LQ, GQ = chr(60), chr(62)
 
@@ -23,7 +23,7 @@ def T(s):
 
 
 WS = tempfile.mkdtemp(prefix="lx-v37-",
-                       dir=os.path.join(HOME, "lethica", "workspace"))
+                       dir=os.path.join(ROOT, "workspace"))
 os.environ["LETHICA_MEM_DIR"] = os.path.join(WS, "memory")
 os.environ["LETHICA_GRAPH_DIR"] = os.path.join(WS, "graph")
 
