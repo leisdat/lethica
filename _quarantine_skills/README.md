@@ -1,5 +1,8 @@
 # Skill Quarantine — kurasi 2026-09-28
 
+> **2026-09-28 (restore):** 19 skill yang dikarantina **dikembalikan ke `skills/` atas permintaan user**.
+> Folder ini tinggal berisi dokumentasi audit. Struktur asal tercatat di bawah untuk referensi.
+
 Skill-skill di folder ini **dipindah keluar dari `skills/`** sehingga tidak lagi
 terindex/di-load oleh Lethica. Struktur subfolder dipertahankan sama seperti
 asalnya di `skills/` (mis. `_quarantine_skills/security/godmode` ← `skills/security/godmode`).

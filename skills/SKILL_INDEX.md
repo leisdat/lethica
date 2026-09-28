@@ -2,9 +2,9 @@
 
 File navigasi untuk memilih skill. **Ini BUKAN skill** — tidak di-load sebagai SKILL.md, gunakan sebagai referensi saat menentukan skill mana yang dipakai.
 
-> **Kurasi 2026-09-28:** 19 skill dikarantina ke `_quarantine_skills/` (jailbreak/bypass tooling +
-> panduan exploit ofensif + game-hacking). Lihat `_quarantine_skills/README.md`.
-> Total aktif: 714 → **695 skill**.
+> **Kurasi 2026-09-28:** 19 skill sempat dikarantina ke `_quarantine_skills/` (jailbreak/bypass tooling +
+> panduan exploit ofensif + game-hacking), lalu **dikembalikan lagi atas permintaan user di hari yang sama**.
+> Total aktif: **714 skill**.
 
 ## Cara Akses
 - Baca langsung: `read_file path="~/lethica/skills/SKILL_INDEX.md"`
