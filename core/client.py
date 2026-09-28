@@ -187,19 +187,15 @@ class LClient:
                       timeout=None, stream_cb=None, tools=None):
         """Coba model chain berurutan. Return (reply, model_used) atau (None, None).
         Entry chain bisa 'provider::model' → route ke provider lain (v2.6).
-        v2.9.5: +last-resort lintas-provider (routerku lokal) kalau SEMUA entry utama gagal —
-        dulu chain yang semuanya nunjuk provider mati (mis. b.ai 429/404) → (None,None) →
-        loop balik ke prompt tanpa jawaban ("berhenti di tengah").
+        v3.8.2: last-resort routerku:: dihapus (provider sudah tidak ada).
         v3.7: tools (skema native FC). Provider yang nolak dengan 400 → retry SEKALI
         tanpa tools (degrade ke tag path) dan tandai self.tools_rejected=True."""
         chain = list(models_chain or config.FAILOVER_CHAIN)
         chain = [model] + [m for m in chain if m != model]
-        # last-resort: provider lokal yang selalu ada (routerku) + model generiknya
-        lr = []
-        for e in ("routerku::Free-All", "routerku::Free-Kombo", "routerku::L"):
-            if e not in chain and e.split("::", 1)[1] != model:
-                lr.append(e)
-        chain = chain + lr
+        # v3.8.2: last-resort "routerku::Free-All/Free-Kombo/L" DIHAPUS — provider
+        # routerku sudah tidak ada (sekarang 9Router); tiap turn gagal sebelumnya
+        # buang 3x HTTP 404 sia-sia + spam log. Kalau chain habis → (None, None),
+        # caller (bridge/loop) yang retry/lapor, bukan model hantu.
         self.last_tool_calls = None
         for entry in chain:
             cl = self

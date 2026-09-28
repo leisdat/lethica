@@ -29,17 +29,42 @@ def mode():
     return (getattr(config, "PLAN_MODE", "auto") or "auto").lower()
 
 
+# penanda multi-step eksplisit → hampir pasti task kerja, bukan obrolan
+_MULTISTEP_MARKERS = (
+    "langkah", "step", "tahap", "pertama", "kedua", "ketiga", "kemudian",
+    "lalu", "terus", "workflow", "pipeline", "rencana", "plan",
+)
+
+
 def is_task_like(text):
-    """Heuristik murah: apakah pesan user terlihat seperti task kerja."""
+    """Heuristik murah: apakah pesan user terlihat seperti task kerja.
+
+    v3.8.2: dibuat lebih ketat — sebelumnya SATU kata kerja umum ("tolong",
+    "cek", "cari") langsung memicu plan mode = 1x panggilan model ekstra
+    (6-48 dtk) + user harus approve ("gas") sebelum kerja jalan. Itu yang
+    bikin Lethica berasa lemot dan kayak bot. Sekarang butuh sinyal lebih kuat:
+    2+ kata kerja aksi, atau 1 kata kerja + pesan cukup panjang, atau penanda
+    multi-step eksplisit.
+    """
     t = (text or "").strip().lower()
     if len(t) < 12:
         return False
     if t.startswith(("/", "!", ".")):
         return False  # command
+    verbs = {v for v in _TASK_VERBS if v in t}
+    # "tolong" itu sopan santun, bukan aksi → jangan dihitung sebagai kata kerja task
+    verbs.discard("tolong")
+    # dedupe substring overlap: "buat" ⊂ "buatkan" jangan kehitung 2 kata kerja
+    verbs = {v for v in verbs
+             if not any(v != w and v in w for w in verbs)}
     # pertanyaan pendek tanpa kata kerja aksi → bukan task
-    if t.endswith("?") and len(t) < 90 and not any(v in t for v in _TASK_VERBS):
+    if t.endswith("?") and len(t) < 90 and not verbs:
         return False
-    if any(v in t for v in _TASK_VERBS):
+    if any(m in t for m in _MULTISTEP_MARKERS):
+        return True
+    if len(verbs) >= 2:
+        return True
+    if verbs and len(t) > 80:
         return True
     return len(t) > 160  # pesan panjang tanpa kata kerja → anggap task/diskusi kerja
 

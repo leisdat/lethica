@@ -32,7 +32,16 @@ def check(name, cond, extra=""):
 
 
 # ── 1. planmode heuristics (pure, offline) ───────────────────────────
-check("1.1 task terdeteksi", planmode.is_task_like("buatkan script backup harian"))
+# v3.8.2: heuristik diketatkan — request pendek 1 kata kerja langsung eksekusi
+# (tanpa plan gate), plan hanya untuk task multi-step/sinyal kuat.
+check("1.1 task pendek 1 verb → langsung (no plan)",
+      not planmode.is_task_like("buatkan script backup harian"))
+check("1.1b task multi-verb → plan",
+      planmode.is_task_like("buatkan script yang ambil data, analisis, terus kirim laporan"))
+check("1.1c kata sopan 'tolong' tidak dihitung verb",
+      not planmode.is_task_like("tolong cek ini"))
+check("1.1d penanda multi-step → plan",
+      planmode.is_task_like("benerin bug login, langkah pertama cek log"))
 check("1.2 chat bukan task", not planmode.is_task_like("halo apa kabar?"))
 check("1.3 tanya pendek bukan task", not planmode.is_task_like("jam berapa sekarang?"))
 check("1.4 command bukan task", not planmode.is_task_like("/model dahl-pool"))
@@ -47,7 +56,10 @@ _old = config.PLAN_MODE
 config.PLAN_MODE = "off"
 check("3.1 mode off → no draft", not planmode.should_draft("buatkan bot telegram"))
 config.PLAN_MODE = "auto"
-check("3.2 auto + task → draft", planmode.should_draft("buatkan bot telegram"))
+check("3.2 auto + task pendek → no draft (langsung eksekusi)",
+      not planmode.should_draft("buatkan bot telegram"))
+check("3.2b auto + task kompleks → draft",
+      planmode.should_draft("buatkan bot telegram yang bisa terima pesan, simpan ke database, terus balas otomatis"))
 check("3.3 auto + chat → no draft", not planmode.should_draft("makasih banyak"))
 check("3.4 approved → no draft", not planmode.should_draft("buatkan bot", plan_approved=True))
 config.PLAN_MODE = "always"

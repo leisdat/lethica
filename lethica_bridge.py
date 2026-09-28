@@ -238,10 +238,36 @@ async def _edit_or_send(update, msg, text):
         await update.message.reply_text(text, parse_mode=None)
 
 
+async def _keepalive(ctx, chat_id, status_msg, t0, last_edit=None):
+    """v3.8.2: selama turn jalan, jaga indikator 'typing…' tetap hidup
+    (Telegram mematikannya tiap ~5 dtk) + update elapsed time tiap ~8 dtk
+    biar user lihat agent-nya kerja, bukan mati. Di-cancel setelah turn selesai."""
+    _le = last_edit if last_edit is not None else [0.0]
+    try:
+        tick = 0
+        while True:
+            await asyncio.sleep(4)
+            tick += 1
+            try:
+                await ctx.bot.send_chat_action(chat_id=chat_id,
+                                               action=ChatAction.TYPING)
+            except Exception:
+                pass
+            if tick % 2 == 0 and time.time() - _le[0] > 6:
+                _le[0] = time.time()
+                try:
+                    await status_msg.edit_text(
+                        f"🤖 mikir… ({time.time() - t0:.0f} dtk)", parse_mode=None)
+                except Exception:
+                    pass
+    except asyncio.CancelledError:
+        pass
+
+
 # ── Handlers ────────────────────────────────────────────────────────
 
 HELP_TEXT = (
-    "🤖 *Lethica* online — agent loop + tools via routerku\n\n"
+    "🤖 *Lethica* online — agent loop + tools via 9Router\n\n"
     "Kirim chat bebas, aku jalankan agent (web\\_search, browse, memory, plan, rag, file, shell).\n\n"
     "📋 *Plan mode* aktif (auto): task terdeteksi → aku susun rencana dulu, "
     "balas *gas* untuk eksekusi.\n"
@@ -365,13 +391,17 @@ async def on_text(update: Update, ctx):
             status_msg = await update.message.reply_text("🚀 plan disetujui, eksekusi…",
                                                          parse_mode=None)
             t0 = time.time()
+            ka_task = asyncio.get_running_loop().create_task(
+                _keepalive(ctx, chat_id, status_msg, t0))
             try:
                 final, used, _st = await _agent_turn(
                     chat_id, _planmode.approval_message(plan_text),
                     None, plan_approved=True)
             except Exception as e:
+                ka_task.cancel()
                 await _edit_or_send(update, status_msg, f"⚠ agent error: {e}"[:MAX_REPLY])
                 return
+            ka_task.cancel()
             await _finish_turn(update, status_msg, final, used, t0)
             return
         if verdict == "reject":
@@ -422,7 +452,12 @@ async def on_text(update: Update, ctx):
             _edit_or_send(update, status_msg, txt), _loop)
 
     try:
-        final, used, status = await _agent_turn(chat_id, user_text, _progress)
+        # v3.8.2: keepalive — typing indicator + elapsed time selama turn jalan
+        ka_task = _loop.create_task(_keepalive(ctx, chat_id, status_msg, t0, last_edit))
+        try:
+            final, used, status = await _agent_turn(chat_id, user_text, _progress)
+        finally:
+            ka_task.cancel()
     except Exception as e:
         await _edit_or_send(update, status_msg, f"⚠ agent error: {e}"[:MAX_REPLY])
         return
