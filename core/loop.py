@@ -56,7 +56,7 @@ def _last_assistant(messages):
 
 
 def _panel(content, model="lethica"):
-    return Panel(content, title=f"[bold yellow]🤖 lethica ({model})[/bold yellow]", border_style="yellow")
+    return ui.live_panel(content, model)
 
 
 def _reflect(cl, model, messages, reply):
@@ -140,7 +140,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
         plan_text, pused = _planmode.draft_plan(_user_text, model, cl)
         # v3.8.1: draft gagal total (None) → skip plan, eksekusi langsung
         if plan_text is not None:
-            console.print(_panel(f"📋 [bold]PLAN (butuh approval)[/bold]\n\n{plan_text}",
+            console.print(ui.live_panel(f"📋 [bold]PLAN (butuh approval)[/bold]\n\n{plan_text}",
                                  pused or model))
             try:
                 _ok = Confirm.ask("Gas eksekusi plan ini?", default=True)
@@ -150,9 +150,9 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
                 tools.tool_plan("clear")
                 return "Plan dibatalkan user.", pused
             messages.append({"role": "user", "content": _planmode.approval_message(plan_text)})
-            console.print("[dim green]✓ plan disetujui → eksekusi[/dim green]")
+            ui.ok("plan disetujui → eksekusi")
         else:
-            console.print("[dim yellow]⚠ draft plan gagal → eksekusi langsung tanpa plan[/dim yellow]")
+            ui.warn("draft plan gagal → eksekusi langsung tanpa plan")
     had_tools = False
     reply, used = None, None
     tool_rounds = 0
@@ -180,7 +180,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
                     model, messages, config.FAILOVER_CHAIN, timeout=config.HTTP_TIMEOUT,
                     tools=tools_payload)
         if reply is None:
-            console.print(f"[bold red]✖ all models failed ({time.time()-turn_t0:.0f}s)[/bold red]")
+            ui.fail(f"all models failed ({time.time()-turn_t0:.0f}s)")
             return None, None
         # provider nolak skema tools → session ini full tag-path saja (hemat 1 call/turn)
         if getattr(cl, "tools_rejected", False) and tools_payload:
@@ -197,7 +197,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
                 amsg["content"] = content
             messages.append(amsg)
             if content:
-                ui.render_md(tags.strip_tags(content), f"[bold yellow]🤖 lethica ({used})[/bold yellow]")
+                ui.render_md(tags.strip_tags(content), used)
             ui.tool_line([_tc_name(tc) for tc in native_calls])
             results = tags.dispatch_calls_list(native_calls, config.SELF_PATH)
             for tc_id, label, out_text in results:
@@ -208,11 +208,11 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
         # auto-continue kalau output kepotong (length / usage nyentuh max / fence ganjil)
         if _output_truncated(cl, reply):
             if cont_rounds >= max_cont:
-                console.print("[dim yellow]⚠ truncation continue limit reached, finalizing[/dim yellow]")
+                ui.warn("truncation continue limit reached, finalizing")
             else:
                 cont_rounds += 1
                 learning.record_truncation()
-                console.print(f"[dim yellow]⚠ output truncated → continue ({cont_rounds}/{max_cont})[/dim yellow]")
+                ui.warn(f"output truncated → continue ({cont_rounds}/{max_cont})")
                 messages.append({"role": "assistant", "content": reply})
                 messages.append({"role": "user", "content": (
                     "⚠ Output kamu terpotong karena batas token. LANJUTKAN tepat dari akhir teks tadi "
@@ -222,7 +222,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
         messages.append({"role": "assistant", "content": reply})
         display = tags.strip_tags(reply)
         if display and not config.STREAM:
-            ui.render_md(display, f"[bold yellow]🤖 lethica ({used})[/bold yellow]")
+            ui.render_md(display, used)
         # v3.8: satu baris ringkas nama tool (bukan 2 baris executing/executed)
         _names = [m.lower() for m in _TAGNAME_RE.findall(reply or "")]
         if _names:
@@ -234,7 +234,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
             if tags.looks_like_tool_attempt(reply) and tool_rounds <= max_rounds:
                 bad_rounds += 1
                 if bad_rounds <= 3:
-                    console.print(f"[dim yellow]⚠ tool call gak ke-parse → minta ulang canonical ({bad_rounds}/3)[/dim yellow]")
+                    ui.warn(f"tool call gak ke-parse → minta ulang canonical ({bad_rounds}/3)")
                     learning.record_truncation()
                     messages.append({"role": "user", "content": (
                         "⚠ Tool call kamu TIDAK ke-eksekusi: formatnya tidak dikenali dispatcher. "
@@ -248,7 +248,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
                         "<search_content path=\"/abs/path\" pattern=\"regex\" />\n"
                         "Ulangi tool call yang sama sekarang dengan format di atas, tanpa narasi tambahan.")})
                     continue
-                console.print("[dim yellow]⚠ tool call rusak berulang → finalisasi[/dim yellow]")
+                ui.warn("tool call rusak berulang → finalisasi")
             if had_tools and _should_revise(cl, model, messages, reply):
                 continue
             return reply, used
@@ -261,7 +261,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
     # v2.9.5: loop berhenti karena LIMIT ronde (bukan karena model finalkan) → paksa finalisasi
     # biar user gak lihat "berhenti mendadak" tanpa jawaban.
     if reply:
-        console.print(f"[dim yellow]⚠ max tool rounds ({max_rounds}) tercapai — finalisasi paksa[/dim yellow]")
+        ui.warn(f"max tool rounds ({max_rounds}) tercapai — finalisasi paksa")
         messages.append({"role": "user", "content": (
             f"Batas {max_rounds} ronde tool tercapai. Finalkan SEKARANG: ringkas hasil yang sudah "
             "didapat + sebutkan yang belum selesai. JANGAN panggil tool lagi.")})
@@ -273,7 +273,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
             pass
         display = tags.strip_tags(reply)
         if display:
-            ui.render_md(display, f"[bold yellow]🤖 lethica ({used})[/bold yellow]")
+            ui.render_md(display, used)
     return reply, used
 
 
@@ -294,7 +294,7 @@ def _streamed_call(cl, model, messages, tools=None):
             buf.append(delta)
             live.update(_panel(Text("".join(buf)), used or model), refresh=True)
 
-    console.print(f"[dim]🧠 {model} ⟳ analyzing...[/dim]")
+    ui.info(f"🧠 {model} ⟳ analyzing...")
     with Live(_panel(Text(""), model), console=console, auto_refresh=False) as live:
         reply, used = cl.chat_failover(
             model, messages, config.FAILOVER_CHAIN,
@@ -313,7 +313,7 @@ def _should_revise(cl, model, messages, reply):
         return False
     if verdict != "REVISE":
         return False
-    console.print("[dim]⟳ reflection: REVISE → lanjut round[/dim]")
+    ui.info("⟳ reflection: REVISE → lanjut round")
     messages.append({"role": "user", "content": (
         "Reflection check menilai jawabanmu BELUM didukung bukti tool hasil tadi. "
         "Perbaiki: pakai ulang tool yang relevan atau koreksi klaim. "

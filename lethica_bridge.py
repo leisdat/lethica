@@ -231,20 +231,30 @@ async def _agent_turn(chat_id, user_text, progress_cb=None, plan_approved=False)
 # ── Reply helpers ───────────────────────────────────────────────────
 
 async def _reply_long(update, text):
-    """Kirim text, auto-split kalau > MAX_REPLY."""
+    """Kirim text, auto-split kalau > MAX_REPLY.
+    Coba Markdown dulu biar respons model (heading/bold/code) tampil rapi;
+    fallback ke plain text kalau parse gagal."""
+    async def _send(t):
+        try:
+            await update.message.reply_text(t, parse_mode="Markdown")
+        except Exception:
+            await update.message.reply_text(t, parse_mode=None)
     if len(text) <= MAX_REPLY:
-        await update.message.reply_text(text, parse_mode=None)
+        await _send(text)
         return
     for i in range(0, len(text), MAX_REPLY):
-        await update.message.reply_text(text[i:i + MAX_REPLY], parse_mode=None)
+        await _send(text[i:i + MAX_REPLY])
 
 
 async def _edit_or_send(update, msg, text):
-    """Edit pesan status kalau bisa, else kirim baru."""
+    """Edit pesan status kalau bisa, else kirim baru. Markdown dulu, fallback plain."""
     try:
-        await msg.edit_text(text, parse_mode=None)
+        try:
+            await msg.edit_text(text, parse_mode="Markdown")
+        except Exception:
+            await msg.edit_text(text, parse_mode=None)
     except Exception:
-        await update.message.reply_text(text, parse_mode=None)
+        await _reply_long(update, text)
 
 
 async def _keepalive(ctx, chat_id, status_msg, t0, last_edit=None):

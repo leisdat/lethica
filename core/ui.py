@@ -469,5 +469,45 @@ def save_history(messages):
 
 # ── Render ──────────────────────────────────────────────────────────
 
-def render_md(text, title):
-    console.print(Panel(Markdown(text), title=title, border_style="yellow"))
+def _assistant_title(model):
+    t = Text()
+    t.append("lethica", style=f"bold {c('brand')}")
+    t.append(f" · {model}", style=c("muted"))
+    return t
+
+
+def assistant_panel(text, model="lethica", footer=None):
+    """Panel standar respons asisten: judul konsisten, border tema, padding lega,
+    footer opsional (mis. '8s · 1.2k tokens'). Satu sumber — jangan hardcode
+    judul panel di call site lagi."""
+    sub = Text(footer, style=c("muted"), justify="right") if footer else None
+    console.print(Panel(Markdown(text), title=_assistant_title(model), subtitle=sub,
+                        border_style=c("accent"), padding=(1, 2)))
+
+
+def live_panel(content, model="lethica"):
+    """Panel (tanpa print) buat Live streaming — gaya sama kayak assistant_panel."""
+    return Panel(content, title=_assistant_title(model),
+                 border_style=c("accent"), padding=(1, 2))
+
+
+def render_md(text, model="lethica", footer=None):
+    assistant_panel(text, model, footer)
+
+
+# ── Status helpers (satu sumber warna, ganti console.print berserakan) ──
+
+def ok(msg):
+    console.print(f"[{c('ok')}]✓ {msg}[/{c('ok')}]")
+
+
+def warn(msg):
+    console.print(f"[{c('warn')}]⚠ {msg}[/{c('warn')}]")
+
+
+def info(msg):
+    console.print(f"[{c('muted')}]· {msg}[/{c('muted')}]")
+
+
+def fail(msg):
+    console.print(f"[bold {c('err')}]✗ {msg}[/bold {c('err')}]")
