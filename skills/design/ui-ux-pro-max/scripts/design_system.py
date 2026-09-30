@@ -983,10 +983,25 @@ def _write_persisted_file(path: Path, content: str, force: bool) -> None:
         if force:
             os.replace(temp_name, path)
             temp_name = None
-        else:
+        elif hasattr(os, "link"):
             # A same-filesystem hard link atomically publishes only if the
             # destination is absent. Losing writers get FileExistsError.
             os.link(temp_name, path)
+        else:
+            # Termux/Android: os.link() tidak ada (bionic libc, no hard-link).
+            # Emulasikan exclusive-create: O_EXCL gagal kalau target sudah ada,
+            # sama seperti os.link() — kontrak "skipped_exists" tetap jalan.
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fd = None  # kepemilikan pindah ke file object
+                    fh.write(content)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+            finally:
+                if fd is not None:
+                    os.close(fd)
+            temp_name = None
     finally:
         if temp_name and os.path.exists(temp_name):
             os.unlink(temp_name)

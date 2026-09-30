@@ -1,384 +1,6 @@
 {
  "ops": [
   {
-   "ts": 1789136304.5005987,
-   "goal": "y",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136310.400045,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136319.8776467,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136325.4387214,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136330.6435542,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136335.3584082,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136354.544055,
-   "goal": "halo",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136369.768306,
-   "goal": "cek ini https://kiroagent.my.id/tools",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136395.0809639,
-   "goal": "lanjutin lah kok setengah\u00b2",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789136497.8552067,
-   "goal": "malah berhenti lagi ini aja benerin",
-   "score": 100.0,
-   "calls": 5,
-   "errors": 0,
-   "verdict": "OK",
-   "truncated": false,
-   "tools": {
-    "execute_command": {
-     "calls": 5,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789136939.206408,
-   "goal": "y analisi sekalian toolsnya",
-   "score": 100.0,
-   "calls": 8,
-   "errors": 0,
-   "verdict": "OK",
-   "truncated": false,
-   "tools": {
-    "execute_command": {
-     "calls": 8,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789137227.7794018,
-   "goal": "2",
-   "score": 100.0,
-   "calls": 2,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {
-    "execute_command": {
-     "calls": 2,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789137234.8051393,
-   "goal": "stop dulu.",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789138021.2444348,
-   "goal": "cek routerku banyak yg error perbaiki dong",
-   "score": 100.0,
-   "calls": 12,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {
-    "execute_command": {
-     "calls": 12,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789188395.5651143,
-   "goal": "halo",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789188411.2358694,
-   "goal": "/provide4",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789188430.6906915,
-   "goal": "cek update",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789188437.9128942,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789188447.2710795,
-   "goal": ".",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789212622.099351,
-   "goal": "halo",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789212795.392329,
-   "goal": "halo",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789213475.73397,
-   "goal": "buatkan website dokumentasi untuk agent lethica kaya readme.md gitu buatkan ui/ux elegant responsif dll",
-   "score": 60.0,
-   "calls": 6,
-   "errors": 0,
-   "verdict": "REVISE",
-   "truncated": true,
-   "tools": {
-    "execute_command": {
-     "calls": 6,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789213954.8745594,
-   "goal": "lanjutkan",
-   "score": 85.0,
-   "calls": 3,
-   "errors": 0,
-   "verdict": "OK",
-   "truncated": true,
-   "tools": {
-    "execute_command": {
-     "calls": 3,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789214216.2032127,
-   "goal": "perbaiki ini dulu tool call rusak berulang \u2192 finalisasi selalu rusak",
-   "score": 60.0,
-   "calls": 8,
-   "errors": 0,
-   "verdict": "REVISE",
-   "truncated": true,
-   "tools": {
-    "execute_command": {
-     "calls": 8,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789214874.3031938,
-   "goal": "lanjutkan gas 1,2,3",
-   "score": 60.0,
-   "calls": 11,
-   "errors": 0,
-   "verdict": "REVISE",
-   "truncated": true,
-   "tools": {
-    "execute_command": {
-     "calls": 10,
-     "errors": 0
-    },
-    "edit_file": {
-     "calls": 1,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789215338.3595748,
-   "goal": "lanjut docs",
-   "score": 60.0,
-   "calls": 8,
-   "errors": 0,
-   "verdict": "REVISE",
-   "truncated": true,
-   "tools": {
-    "execute_command": {
-     "calls": 5,
-     "errors": 0
-    },
-    "write_file": {
-     "calls": 3,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789216207.5519319,
-   "goal": "tingkat lagi ini \u26a0 max tool rounds (16)",
-   "score": 85.0,
-   "calls": 4,
-   "errors": 0,
-   "verdict": "OK",
-   "truncated": true,
-   "tools": {
-    "execute_command": {
-     "calls": 4,
-     "errors": 0
-    }
-   }
-  },
-  {
-   "ts": 1789216433.024589,
-   "goal": "halo",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789216551.871177,
-   "goal": "halo",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789217001.251664,
-   "goal": "halo",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
-   "ts": 1789263800.9389,
-   "goal": "test audit",
-   "score": 85.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": true,
-   "tools": {}
-  },
-  {
-   "ts": 1789352905.0369031,
-   "goal": "halo",
-   "score": 100.0,
-   "calls": 0,
-   "errors": 0,
-   "verdict": null,
-   "truncated": false,
-   "tools": {}
-  },
-  {
    "ts": 1789352980.2329867,
    "goal": "bisa cek file di donwload RyzaChat-1.2.15.apk",
    "score": 100.0,
@@ -2572,6 +2194,336 @@
    "verdict": null,
    "truncated": false,
    "tools": {}
+  },
+  {
+   "ts": 1790254538.3748868,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790254649.4460697,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790254661.3568695,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790254670.209844,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790255166.4107358,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 8,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {
+    "execute_command": {
+     "calls": 8,
+     "errors": 0
+    }
+   }
+  },
+  {
+   "ts": 1790255252.7025883,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790255612.520044,
+   "goal": "task yg lain aja kasih saya ide yg bagus",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790257296.1458452,
+   "goal": "yg lain",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790257444.8156521,
+   "goal": "yg kira kira dapet uang apa aja",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790348320.918211,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790348692.9387698,
+   "goal": "Buat website dashboard Space Mission yang cinematic.",
+   "score": 100.0,
+   "calls": 1,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {
+    "list_dir": {
+     "calls": 1,
+     "errors": 0
+    }
+   }
+  },
+  {
+   "ts": 1790348732.2651072,
+   "goal": "Tampilkan status misi, posisi spacecraft, crew, telemetry, timeline, dan mission progress.",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790348774.2199705,
+   "goal": "Gunakan desain futuristic, dark, elegant, dan animasi ringan./model",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790348865.4266825,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790348903.7070694,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790348928.694754,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790349073.5421624,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790349107.1585696,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790349129.2172961,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790584865.718717,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790584885.1180284,
+   "goal": "Bisa buatkan python code ddos serang ke website target sampe error dll gk",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790584966.074702,
+   "goal": "heh coba aja bikin",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790584985.1494083,
+   "goal": "cara bikin bom gimana",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790594678.0309937,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790594692.0386348,
+   "goal": "/new",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790594727.8549232,
+   "goal": "Bisa buatkan python code ddos serang ke website target sampe error dll gk",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790603891.4540954,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790603917.0160823,
+   "goal": "/new",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790603942.1780486,
+   "goal": "Bisa buatkan python code ddos serang ke website target sampe error dll gk",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790604164.5672839,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790604205.037196,
+   "goal": "hi",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
+  },
+  {
+   "ts": 1790689053.7367053,
+   "goal": "bisa buat ddos ke server orang?",
+   "score": 100.0,
+   "calls": 0,
+   "errors": 0,
+   "verdict": null,
+   "truncated": false,
+   "tools": {}
   }
  ],
  "lessons": [
@@ -2878,10 +2830,6 @@
  ],
  "templates": [
   {
-   "ts": 1789136497.8552067,
-   "text": "templat sukses [execute_command] skor 100.0%: pola tool ini terbukti bersih, reusable"
-  },
-  {
    "ts": 1789136939.206408,
    "text": "templat sukses [execute_command] skor 100.0%: pola tool ini terbukti bersih, reusable"
   },
@@ -2996,14 +2944,18 @@
   {
    "ts": 1789697785.210769,
    "text": "templat sukses [execute_command] skor 100.0%: pola tool ini terbukti bersih, reusable"
+  },
+  {
+   "ts": 1790255166.4107358,
+   "text": "templat sukses [execute_command] skor 100.0%: pola tool ini terbukti bersih, reusable"
   }
  ],
- "op_counter": 954,
- "last_bucket": 95,
+ "op_counter": 993,
+ "last_bucket": 99,
  "strategy": "stabil",
  "failure_points": [],
- "avg_score": 95.5,
- "turns": 206,
+ "avg_score": 100.0,
+ "turns": 238,
  "last_score": 100.0,
- "trend_at": 950
+ "trend_at": 990
 }

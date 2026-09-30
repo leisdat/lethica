@@ -125,7 +125,7 @@ def get_version():
                 return v
     except Exception:
         pass
-    return "3.7.2"
+    return "3.9.0"
 
 
 VERSION = get_version()
@@ -156,6 +156,9 @@ _DERIVED = [
     ("PLAN_MODE",        ("model", "plan_mode", "auto"), str),
     ("SUBAGENT_MAX_ROUNDS", ("model", "subagent_max_rounds", 4), int),
     ("SUBAGENT_MAX_WORKERS", ("model", "subagent_max_workers", 4), int),
+     # v3.8 UI
+     ("VERBOSE",          ("ui", "verbose", False)),
+     ("BANNER",           ("ui", "banner", "compact"), str),
 ]
 
 
@@ -194,6 +197,7 @@ AUTOLOAD_SKILLS = _d0["AUTOLOAD_SKILLS"]
 PLAN_MODE = _d0["PLAN_MODE"]
 SUBAGENT_MAX_ROUNDS, SUBAGENT_MAX_WORKERS = _d0["SUBAGENT_MAX_ROUNDS"], _d0["SUBAGENT_MAX_WORKERS"]
 NATIVE_FC = _d0["NATIVE_FC"]
+VERBOSE, BANNER = _d0["VERBOSE"], _d0["BANNER"]
 DAILY_BUDGET, ACTIVE_PROVIDER, VERIFIER_MODEL = _d0["DAILY_BUDGET"], _d0["ACTIVE_PROVIDER"], _d0["VERIFIER_MODEL"]
 VERSION = get_version()
 

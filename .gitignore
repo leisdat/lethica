@@ -60,3 +60,9 @@ venv/
 run_bridge.sh
 bridge.log
 ensure-bridge.sh
+
+# Local scratch / runtime (jangan di-commit)
+_dbg_*.py
+.lethica_history
+skills/generated/
+
