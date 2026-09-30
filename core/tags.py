@@ -580,8 +580,14 @@ def dispatch(reply, agent_path):
         outputs.append(f"[read_file]\n{tools.tool_read_file(m.group(1), m.group(2), m.group(3))}")
     for m in tools.WRITE_TAG_RE.finditer(reply):
         matched.append((m.start(), m.end()))
-        _act("✍️", "write_file", m.group(1))
-        outputs.append(f"[write_file]\n{tools.tool_write_file(m.group(1), _unesc(m.group(3)), append=(m.group(2) == 'true'))}")
+        if m.group(1) is not None:
+            # body-form: <write_file path=.. [append=..]>content</write_file>
+            path, content, append = m.group(1), _unesc(m.group(3)), m.group(2)
+        else:
+            # self-closing: <write_file path=.. [append=..] content=".."/>
+            path, content, append = m.group(4), _unesc(m.group(6)), m.group(5)
+        _act("✍️", "write_file", path)
+        outputs.append(f"[write_file]\n{tools.tool_write_file(path, content, append=(append == 'true'))}")
     for m in tools.EDIT_TAG_RE.finditer(reply):
         matched.append((m.start(), m.end()))
         _act("🛠️", "edit_file", m.group(1))
@@ -629,9 +635,15 @@ def dispatch(reply, agent_path):
         outputs.append(f"[rag]\n{rag.tool_rag(a.get('action', 'search'), a.get('query'))}")
     for m in tools.EXEC_TAG_RE.finditer(reply):
         matched.append((m.start(), m.end()))
-        cmd = m.group(1).strip()
+        # dua bentuk: <exec command=".." [timeout=".."]/> atau invoke wrapper (group3)
+        if m.group(1) is not None:
+            cmd = m.group(1).strip()
+            to = int(m.group(2) or 120)
+        else:
+            cmd = (m.group(3) or "").strip()
+            to = 120
         _act("💻", "execute_command", cmd[:80])
-        outputs.append(f"[execute_command]\n{tools.tool_run_command(cmd)}")
+        outputs.append(f"[execute_command]\n{tools.tool_run_command(cmd, timeout=to)}")
     for m in tools.RUNCODE_TAG_RE.finditer(reply):
         matched.append((m.start(), m.end()))
         _act("⚙️", "run_code", m.group(1))

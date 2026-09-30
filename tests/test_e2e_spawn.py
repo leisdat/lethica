@@ -30,21 +30,34 @@ def main():
         print("FAIL - system prompt terlalu besar untuk e2e")
         return 1
     cl = client.LClient()
+    # Model harus ikut provider aktif (`[server]`) — "L" cuma alias combo di routerku,
+    # provider lain (mis. dahl) balas 400 Bad Request.
+    model = getattr(config, "DEFAULT_MODEL", None) or "L"
     task = ("Gunakan skill coding. Buat fungsi python `is_even(n)` yang return True kalau genap. "
             "Tulis ke workspace/_t_e2e.py lalu jalankan test.")
-    try:
-        r = cl.chat("L", [{"role":"system","content":SYSP},{"role":"user","content":task}],
-                    max_tokens=1500, timeout=90)
-    except Exception as e:
-        print("FAIL - chat exception:", e); return 1
-    if not isinstance(r, dict) or "choices" not in r:
-        print("FAIL - respon bukan dict/chat:", str(r)[:200]); return 1
-    text = r["choices"][0]["message"]["content"]
-    outs = tags.dispatch(text, agent_path=os.path.abspath(__file__))
-    fails = 0
-    fails += 0 if ok("write_file" in text or "execute_command" in outs, "model generate tool call") else 1
-    # cek file kebikin
     fp = os.path.join(config.WORKSPACE, "_t_e2e.py")
+    if os.path.exists(fp):
+        os.remove(fp)
+    msgs = [{"role": "system", "content": SYSP}, {"role": "user", "content": task}]
+    text, outs = "", []
+    for rnd in range(3):
+        try:
+            r = cl.chat(model, msgs, max_tokens=1500, timeout=90)
+        except Exception as e:
+            print("FAIL - chat exception:", e); return 1
+        if not isinstance(r, dict) or "choices" not in r:
+            print("FAIL - respon bukan dict/chat:", str(r)[:200]); return 1
+        text = r["choices"][0]["message"]["content"] or ""
+        outs += tags.dispatch(text, agent_path=os.path.abspath(__file__))
+        if os.path.exists(fp):
+            break
+        # ronde lanjutan: model cuma eksplorasi (mis. ls skills) di turn 1 → dorong aksi nyata
+        msgs.append({"role": "assistant", "content": text})
+        msgs.append({"role": "user",
+                     "content": "Lanjutkan sekarang: tulis file lewat tag write_file, lalu jalankan test."})
+    fails = 0
+    fails += 0 if ok("write_file" in text or "execute_command" in text or outs, "model generate tool call") else 1
+    # cek file kebikin
     if os.path.exists(fp):
         print("PASS - file tertulis:", fp)
         os.remove(fp)

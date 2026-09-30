@@ -37,7 +37,8 @@ console = None  # injected
 TAG_RE = None
 
 EXEC_TAG_RE = re.compile(
-    r'<invoke\s+name="antml:computer:execute_command">\s*<parameter\s+name="command">(.*?)</parameter>\s*</invoke>',
+    r'<exec\s+command="([^"]*)"(?:\s+timeout="(\d+)")?\s*/?>'
+    r'|<invoke\s+name="antml:computer:execute_command">\s*<parameter\s+name="command">(.*?)</parameter>\s*</invoke>',
     re.DOTALL | re.IGNORECASE,
 )
 READ_TAG_RE = re.compile(
@@ -45,7 +46,8 @@ READ_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 WRITE_TAG_RE = re.compile(
-    r'<write_file\s+path="([^"]+)"(?:\s+append="(true|false)")?\s*>(.*?)</write_file>',
+    r'<write_file\s+path="([^"]+)"(?:\s+append="(true|false)")?\s*>(.*?)</write_file>'
+    r'|<write_file\s+path="([^"]+)"(?:\s+append="(true|false)")?\s+content="([^"]*)"\s*/?>',
     re.DOTALL | re.IGNORECASE,
 )
 EDIT_TAG_RE = re.compile(

@@ -255,8 +255,12 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
 
 def _streamed_call(cl, model, messages, tools=None):
     """Streaming chat call dengan Live panel. Return (reply, used).
-    v3.7: tools → native FC (delta tool_calls diakumulasi di chat_stream)."""
+    v3.7: tools → native FC (delta tool_calls diakumulasi di chat_stream).
+    v3.8.1: panel title pakai model RIIL (used) hasil failover, bukan model yang diminta —
+    dulu judul tetap nunjukin model yang gagal (`✖ ... unavailable, failover...` di atas,
+    judul tetap deepseek) sementara footer kecil nunjukin glm → log menyesatkan."""
     buf = []
+    used = None  # v3.8.1: diisi setelah chat_failover; dipakai closure _cb (hindari NameError)
 
     def _cb(delta, kind):
         if kind == "reasoning":
@@ -264,7 +268,7 @@ def _streamed_call(cl, model, messages, tools=None):
                 console.print(f"[dim italic]{delta}[/dim italic]", end="")
         else:
             buf.append(delta)
-            live.update(_panel(Text("".join(buf)), model), refresh=True)
+            live.update(_panel(Text("".join(buf)), used or model), refresh=True)
 
     console.print(f"[dim]🧠 {model} ⟳ analyzing...[/dim]")
     with Live(_panel(Text(""), model), console=console, auto_refresh=False) as live:
@@ -272,7 +276,7 @@ def _streamed_call(cl, model, messages, tools=None):
             model, messages, config.FAILOVER_CHAIN,
             timeout=config.HTTP_TIMEOUT, stream_cb=_cb, tools=tools)
         display_final = tags.strip_tags("".join(buf))
-        live.update(_panel(Markdown(display_final), model), refresh=True)
+        live.update(_panel(Markdown(display_final), used or model), refresh=True)
     return reply, used
 
 
