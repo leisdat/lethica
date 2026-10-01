@@ -95,19 +95,36 @@ def help_table():
 
 # ── Banner ──────────────────────────────────────────────────────────
 
+def _tool_count():
+    """Jumlah tool aktif dari tooldef (tanpa import berat)."""
+    try:
+        from core import tooldef
+        return len(tooldef.TOOL_DEFS)
+    except Exception:
+        return 0
+
+
 def show_logo(model=None):
     """Banner. Mode dari config.BANNER: 'compact' (default) | 'full' | 'off'."""
     mode = str(getattr(config, "BANNER", "compact") or "compact").lower()
     if mode == "off":
         return
+    n_tools = _tool_count()
     if mode == "full":
-        sub = (f"[bold {c('err')}]{config.PERSONA_MODE.upper()} • v{config.VERSION} • "
-               "config.toml • web/browser/memory/plan/rag • routerku-powered[/bold red]")
+        head = Text("L E T H I C A", style=f"bold {c('brand')}", justify="center")
+        sub = (f"[bold {c('accent')}]{config.PERSONA_MODE.upper()}[/bold {c('accent')}]"
+               f" [{c('muted')}]•[/{c('muted')}] v{config.VERSION}"
+               f" [{c('muted')}]•[/{c('muted')}] {n_tools} tools"
+               f" [{c('muted')}]•[/{c('muted')}] {config.ACTIVE_PROVIDER}")
+        if model:
+            sub += f" [{c('muted')}]•[/{c('muted')}] [{c('ok')}]{model}[/{c('ok')}]"
         console.print(Panel(
-            Text(LOGO, style=f"bold {c('brand')}", justify="center"),
-            title=f"[bold {c('accent')}]Lethica v{config.VERSION}[/bold {c('accent')}]",
+            Group(head, Text(LOGO.strip("\n"), style=c("brand"), justify="center")),
+            title=f"[bold {c('accent')}]◆ Lethica[/bold {c('accent')}]",
             subtitle=sub,
-            border_style=c("err"),
+            border_style=c("brand"),
+            box=box.DOUBLE,
+            padding=(1, 2),
         ))
         return
     # compact: 1 baris, hemat ruang vertikal di HP
@@ -116,18 +133,28 @@ def show_logo(model=None):
     brand.append(f"v{config.VERSION}", style=c("muted"))
     brand.append("  •  ", style=c("muted"))
     brand.append(str(config.PERSONA_MODE), style=c("accent"))
+    brand.append("  •  ", style=c("muted"))
+    brand.append(f"{n_tools} tools", style=c("muted"))
     if model:
         brand.append("  •  ", style=c("muted"))
         brand.append(str(model), style=c("ok"))
     console.print(brand)
 
 
-def status_line(model=None, extra=None):
-    """Satu baris status pengganti panel 6-baris (v3.8)."""
+def status_line(model=None, extra=None, tools=None):
+    """Satu baris status pengganti panel 6-baris (v3.8).
+
+    tools: opsional — string nama tool aktif ("a, b") atau list/tuple nama tool.
+    """
     parts = []
     if model:
-        parts.append(f"[{c('ok')}]{model}[/{c('ok')}]")
+        parts.append(f"[{c('ok')}]◆ {model}[/{c('ok')}]")
     parts.append(f"[{c('muted')}]{config.ACTIVE_PROVIDER}[/{c('muted')}]")
+    if tools:
+        names = tools if isinstance(tools, str) else ", ".join(str(t) for t in tools)
+        parts.append(f"[{c('accent')}]⚙ {names}[/{c('accent')}]")
+    else:
+        parts.append(f"[{c('muted')}]{_tool_count()} tools[/{c('muted')}]")
     parts.append(f"[{c('muted')}]{config.WORKSPACE}[/{c('muted')}]")
     if extra:
         parts.append(f"[{c('muted')}]{extra}[/{c('muted')}]")

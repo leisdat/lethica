@@ -140,13 +140,96 @@ TOOL_DEFS = {
             "tasks": ("string", True, "JSON [{\"name\":\"a\",\"task\":\"...\"}] atau baris 'nama: task'"),
             "max_rounds": ("integer", False, "Max tool rounds per sub-agent, default 4"),
         }),
+    # ── v3.9: port Kiro Agent (semua OPTIONAL-by-design: cek dep/binary/env dulu) ──
+    "phone_lookup": dict(
+        fn="tool_phone_lookup", icon="📞", aliases=("phone", "cek_nomor"),
+        desc="OSINT nomor telepon offline: operator, region, valid/tidak. Butuh lib 'phonenumbers' (opsional).",
+        params={
+            "number": ("string", True, "Nomor telepon, mis. +6281234567890"),
+        }),
+    "gps": dict(
+        fn="tool_gps", icon="📍", aliases=("geolocate", "lokasi", "geolocation"),
+        desc="Lokasi perangkat: termux-location (HP) → IP geolocation ip-api.com → ipapi.co.",
+        params={
+            "ip": ("string", False, "IP spesifik untuk geolokasi; kosong = IP sendiri"),
+        }),
+    "image_vision": dict(
+        fn="tool_image_vision", icon="👁️", aliases=("vision", "analisa_gambar"),
+        desc="Analisa gambar via model vision. BUTUH model vision-capable — model Dahl pool text-only, jadi isi arg 'model' bila perlu.",
+        params={
+            "path": ("string", True, "Path gambar (dalam sandbox)"),
+            "prompt": ("string", False, "Pertanyaan/instruksi soal gambar"),
+            "model": ("string", False, "Model vision, mis. gpt-4o. Default: VISION_MODEL / model default"),
+        }),
+    "send_email": dict(
+        fn="tool_send_email", icon="✉️", aliases=("email", "kirim_email"),
+        desc="Kirim email via Gmail SMTP. Butuh env LETHICA_EMAIL_USER + LETHICA_EMAIL_PASS (app password).",
+        params={
+            "to": ("string", True, "Alamat tujuan"),
+            "subject": ("string", True, "Subjek"),
+            "body": ("string", True, "Isi email"),
+        }),
+    "read_inbox": dict(
+        fn="tool_read_inbox", icon="📥", aliases=("inbox", "cek_email"),
+        desc="Baca email terbaru via Gmail IMAP. Env sama seperti send_email.",
+        params={
+            "limit": ("integer", False, "Jumlah email, default 5, maks 20"),
+            "query": ("string", False, "Kriteria IMAP, mis. 'UNSEEN'. Default ALL"),
+        }),
+    "notify_project": dict(
+        fn="tool_notify_project", icon="🔔", aliases=("notify",),
+        desc="Kirim email notifikasi 'projek selesai' ke email sendiri.",
+        params={
+            "project": ("string", True, "Nama projek"),
+            "summary": ("string", False, "Ringkasan hasil"),
+        }),
+    "crack_hash": dict(
+        fn="tool_crack_hash", icon="🔓", aliases=("crack",),
+        desc="Crack hash via hashcat / file via john. Butuh binary terinstall + wordlist (wajib). Cek dulu sebelum jalan.",
+        params={
+            "hash": ("string", True, "Hash string, atau path file untuk mode=file"),
+            "type": ("string", False, "md5|sha1|sha256|sha512|ntlm|bcrypt (auto-detect bila kosong)"),
+            "wordlist": ("string", False, "Path wordlist"),
+            "mode": (("hash", "file"), False, "hash=string via hashcat, file=john. Default hash"),
+        }),
+    "network_sniffer": dict(
+        fn="tool_network_sniffer", icon="📡", aliases=("sniff",),
+        desc="Capture paket: scapy → tcpdump → fallback /proc (koneksi aktif). Butuh root untuk live capture.",
+        params={
+            "interface": ("string", False, "Interface, default 'any'"),
+            "count": ("integer", False, "Jumlah paket/koneksi, default 10, maks 50"),
+            "filter": ("string", False, "Filter BPF, mis. 'port 80'"),
+        }),
+    "android_pentest": dict(
+        fn="tool_android_pentest", icon="🤖", aliases=("droidhunter",),
+        desc="Jalankan DroidHunter dengan argumen. Butuh ~/DroidHunter/droidhunter.py atau binary di PATH.",
+        params={
+            "args": ("string", True, "Argumen untuk droidhunter.py"),
+        }),
+    "agent_browser": dict(
+        fn="tool_agent_browser", icon="🌐", aliases=("abrowser",),
+        desc="Browser automation via binary 'agent-browser' (Rust) + chromium. Butuh binary terinstall.",
+        params={
+            "commands": ("string", True, "Perintah agent-browser, satu per baris"),
+            "chromium_path": ("string", False, "Path chromium; auto-detect bila kosong"),
+        }),
+    "hyperbrowser": dict(
+        fn="tool_hyperbrowser", icon="☁️", aliases=("hbrowser",),
+        desc="Browser cloud stealth via Hyperbrowser. Butuh env HYPERBROWSER_API_KEY + lib hyperbrowser/playwright.",
+        params={
+            "task": ("string", True, "Tugas; URL di dalamnya dibuka otomatis, atau jadi query search"),
+        }),
 }
 
 # Urutan eksekusi antar-tipe = urutan dispatch historis tags.py
 # (read dulu, exec belakangan — determinisme output dipertahankan).
 EXEC_ORDER = ["read_file", "write_file", "edit_file", "list_dir", "search_content",
               "http_request", "download_file", "web_search", "browse", "memory",
-              "plan", "rag", "exec", "run_code", "task", "spawn", "skill"]
+              "plan", "rag", "exec", "run_code", "task", "spawn", "skill",
+              # v3.9 port Kiro: baca-ish dulu, lalu yang butuh env/binary, exec-ish paling akhir
+              "phone_lookup", "gps", "image_vision", "send_email", "read_inbox",
+              "notify_project", "agent_browser", "hyperbrowser",
+              "crack_hash", "network_sniffer", "android_pentest"]
 _ORDER_RANK = {n: i for i, n in enumerate(EXEC_ORDER)}
 
 _BOOL_TRUE = {"true", "1", "yes", "y", "on"}

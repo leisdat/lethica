@@ -1070,6 +1070,592 @@ def tool_run_code(lang, src, timeout=30):
     except FileNotFoundError as e: return '[run_code] missing compiler: %s'%e
     except Exception as e: return '[run_code] ERROR: %s'%e
 
+# ── v3.9: tool port dari Kiro Agent (adaptasi, bukan copy mentah) ──
+# Semua tool di bawah OPTIONAL-by-design: cek dep/binary/env dulu,
+# return pesan jelas kalau belum tersedia — tidak pernah traceback.
+
+def _progress(label):
+    if console:
+        console.print(f"[dim cyan]➔ {label}[/dim cyan]")
+
+
+def tool_phone_lookup(number):
+    """OSINT nomor telepon offline (lib phonenumbers, opsional)."""
+    try:
+        import phonenumbers
+        from phonenumbers import carrier, geocoder, number_type, PhoneNumberType
+    except ImportError:
+        return ("[phone_lookup] lib 'phonenumbers' belum ada.\n"
+                "Install ke venv lethica:\n"
+                "  ~/workspace/lethica/venv/bin/pip install phonenumbers")
+    number = (number or "").strip()
+    if not number:
+        return "[phone_lookup] arg 'number' kosong."
+    _progress(f"Lookup nomor: {number[:18]}")
+    try:
+        parsed = phonenumbers.parse(number)
+    except Exception as e:
+        return f"[phone_lookup] nomor tidak bisa di-parse: {e}"
+    tipe_map = {PhoneNumberType.FIXED_LINE: "Fixed Line", PhoneNumberType.MOBILE: "Mobile",
+                PhoneNumberType.FIXED_LINE_OR_MOBILE: "Fixed/Mobile",
+                PhoneNumberType.TOLL_FREE: "Toll Free", PhoneNumberType.PREMIUM_RATE: "Premium",
+                PhoneNumberType.SHARED_COST: "Shared Cost", PhoneNumberType.VOIP: "VOIP",
+                PhoneNumberType.PERSONAL_NUMBER: "Personal", PhoneNumberType.PAGER: "Pager",
+                PhoneNumberType.UAN: "UAN", PhoneNumberType.VOICEMAIL: "Voicemail",
+                PhoneNumberType.UNKNOWN: "Unknown"}
+    lines = [
+        f"Nomor    : {phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)}",
+        f"Region   : {geocoder.description_for_number(parsed, 'id') or 'N/A'}",
+        f"Carrier  : {carrier.name_for_number(parsed, 'en') or 'N/A'}",
+        f"Valid    : {phonenumbers.is_valid_number(parsed)}",
+        f"Possible : {phonenumbers.is_possible_number(parsed)}",
+        f"Tipe     : {tipe_map.get(number_type(parsed), 'Unknown')}",
+        f"Country  : {phonenumbers.region_code_for_number(parsed) or 'N/A'} (+{parsed.country_code})",
+    ]
+    return "[phone_lookup]\n" + "\n".join(lines)
+
+
+def _http_json(url, timeout=12):
+    req = urllib.request.Request(url, headers={"User-Agent": f"Lethica/{config.VERSION}"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", errors="replace"))
+
+
+def tool_gps(ip=None):
+    """Lokasi: termux-location (HP) → ip-api.com → ipapi.co."""
+    _progress("Cek lokasi...")
+    if shutil.which("termux-location"):
+        for provider in ("gps", "network", ""):
+            try:
+                cmd = f"termux-location -p {provider}" if provider else "termux-location"
+                pr = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20)
+                data = json.loads(pr.stdout) if pr.stdout.strip().startswith("{") else {}
+                lat = data.get("latitude") or data.get("lat")
+                lon = data.get("longitude") or data.get("lon")
+                if lat and lon:
+                    return ("[gps] sensor OK (provider: %s)\nlat=%s lon=%s akurasi=%sm alt=%s" %
+                            (provider or "default", lat, lon,
+                             data.get("accuracy", "?"), data.get("altitude", "?")))
+            except Exception:
+                pass
+    target = (ip or "").strip()
+    suffix = f"/{target}" if target else ""
+    try:
+        d = _http_json(f"http://ip-api.com/json{suffix}"
+                       "?fields=status,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,query")
+        if d.get("status") == "success":
+            return ("[gps] IP geolocation (ip-api.com, akurasi kasar)\n"
+                    f"{d.get('city')}, {d.get('regionName')}, {d.get('country')} ({d.get('countryCode')})\n"
+                    f"lat={d.get('lat')} lon={d.get('lon')} tz={d.get('timezone')} "
+                    f"isp={d.get('isp')} ip={d.get('query')}")
+    except Exception:
+        pass
+    try:
+        d = _http_json(f"https://ipapi.co/{target}/json/" if target else "https://ipapi.co/json/")
+        if d and not d.get("error"):
+            return ("[gps] IP geolocation (ipapi.co, akurasi kasar)\n"
+                    f"{d.get('city')}, {d.get('region')}, {d.get('country_name')}\n"
+                    f"lat={d.get('latitude')} lon={d.get('longitude')} tz={d.get('timezone')} ip={d.get('ip')}")
+    except Exception as e:
+        return f"[gps] semua metode gagal: {e}"
+    return "[gps] tidak dapat menentukan lokasi."
+
+
+_MIME_BY_EXT = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".gif": "image/gif", ".webp": "image/webp"}
+
+
+def tool_image_vision(path, prompt=None, model=None):
+    """Analisa gambar via model vision-capable (bukan model text-only)."""
+    p = _expand(path or "")
+    if not in_sandbox(p):
+        return (f"[image_vision] path '{path}' OUTSIDE sandbox.\n"
+                "Taruh gambar di ~/lethica/workspace/ dulu.")
+    if not os.path.isfile(p):
+        return f"[image_vision] file tidak ada: {path}"
+    if os.path.getsize(p) > 8 * 1024 * 1024:
+        return "[image_vision] file > 8MB, tolak (hemat token)."
+    _progress(f"Analisa gambar: {os.path.basename(p)}")
+    try:
+        with open(p, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("ascii")
+    except Exception as e:
+        return f"[image_vision] gagal baca file: {e}"
+    mime = _MIME_BY_EXT.get(os.path.splitext(p)[1].lower(), "image/png")
+    mdl = (model or "").strip() or getattr(config, "VISION_MODEL", None) or config.DEFAULT_MODEL
+    q = (prompt or "").strip() or "Deskripsikan gambar ini secara ringkas."
+    from core import client as _client_mod  # lazy: hindari circular import
+    r = _client_mod.LClient().chat(
+        mdl, [{"role": "user", "content": [
+            {"type": "text", "text": q},
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}]}],
+        max_tokens=600)
+    if isinstance(r, dict) and "error" in r:
+        return f"[image_vision] error dari {mdl}: {r['error']}"
+    try:
+        txt = (r.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+    except Exception:
+        txt = ""
+    if not txt.strip():
+        return (f"[image_vision] model {mdl} tidak mengembalikan jawaban — "
+                "kemungkinan bukan model vision. Isi arg 'model' dengan model vision-capable.")
+    return f"[image_vision] ({mdl})\n{txt.strip()[:3000]}"
+
+
+def _email_creds():
+    user = os.environ.get("LETHICA_EMAIL_USER", "").strip()
+    pw = os.environ.get("LETHICA_EMAIL_PASS", "").strip()
+    if not user or not pw:
+        return None, ("[email] env belum diset.\n"
+                      "Set LETHICA_EMAIL_USER dan LETHICA_EMAIL_PASS "
+                      "(Gmail App Password: Google Account → Security → "
+                      "2-Step Verification → App passwords).")
+    return (user, pw), None
+
+
+def tool_send_email(to, subject, body):
+    """Kirim email via Gmail SMTP."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    creds, err = _email_creds()
+    if err:
+        return err
+    user, pw = creds
+    to = (to or "").strip()
+    if not to:
+        return "[send_email] arg 'to' kosong."
+    _progress(f"Kirim email ke: {to}")
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = user
+        msg["To"] = to
+        msg["Subject"] = subject or ""
+        msg.attach(MIMEText(body or "", "plain", "utf-8"))
+        s = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
+        s.starttls()
+        s.login(user, pw)
+        s.sendmail(user, [to], msg.as_string())
+        s.quit()
+        return f"[send_email] OK terkirim ke {to} — subjek: {subject}"
+    except Exception as e:
+        return f"[send_email] gagal: {e}"
+
+
+def _decode_hdr(h):
+    from email.header import decode_header
+    if not h:
+        return "?"
+    parts = []
+    for txt, enc in decode_header(h):
+        if isinstance(txt, bytes):
+            try:
+                parts.append(txt.decode(enc or "utf-8", errors="replace"))
+            except Exception:
+                parts.append(txt.decode("utf-8", errors="replace"))
+        else:
+            parts.append(txt)
+    return "".join(parts) or "?"
+
+
+def _mail_snippet(em):
+    try:
+        if em.is_multipart():
+            for part in em.walk():
+                if (part.get_content_type() == "text/plain"
+                        and "attachment" not in str(part.get("Content-Disposition"))):
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        return payload.decode(errors="replace").strip()[:150].replace("\n", " ")
+        else:
+            payload = em.get_payload(decode=True)
+            if payload:
+                return payload.decode(errors="replace").strip()[:150].replace("\n", " ")
+    except Exception:
+        pass
+    return "(tidak bisa baca isi)"
+
+
+def tool_read_inbox(limit=5, query=None):
+    """Baca email terbaru via Gmail IMAP."""
+    import imaplib
+    import email as _email
+    creds, err = _email_creds()
+    if err:
+        return err
+    user, pw = creds
+    try:
+        limit = max(1, min(int(limit or 5), 20))
+    except Exception:
+        limit = 5
+    _progress(f"Cek inbox (limit {limit})...")
+    try:
+        m = imaplib.IMAP4_SSL("imap.gmail.com")
+        m.login(user, pw)
+        m.select("inbox")
+        crit = (query or "ALL").strip() or "ALL"
+        _st, data = m.search(None, crit)
+        ids = data[0].split()
+        out = [f"[read_inbox] {len(ids)} cocok, tampil {min(limit, len(ids))} terbaru:"]
+        for mid in reversed(ids[-limit:]):
+            _st, md = m.fetch(mid, "(RFC822)")
+            subj = frm = "?"
+            snippet = ""
+            for part in md:
+                if isinstance(part, tuple):
+                    em = _email.message_from_bytes(part[1])
+                    subj = _decode_hdr(em.get("Subject"))
+                    frm = _decode_hdr(em.get("From"))
+                    snippet = _mail_snippet(em)
+            out.append(f"— Dari: {frm}\n  Subjek: {subj}\n  Isi: {snippet}")
+        m.logout()
+        return "\n".join(out)
+    except Exception as e:
+        return f"[read_inbox] gagal: {e}"
+
+
+def tool_notify_project(project, summary=None):
+    """Email notifikasi 'projek selesai' ke email sendiri."""
+    import socket
+    import datetime as _dt
+    project = (project or "").strip()
+    if not project:
+        return "[notify_project] arg 'project' kosong."
+    me = os.environ.get("LETHICA_EMAIL_USER", "").strip()
+    if not me:
+        return "[notify_project] LETHICA_EMAIL_USER belum diset — tidak tahu mau kirim ke mana."
+    body = (f"Projek selesai: {project}\n"
+            f"Ringkasan: {summary or '-'}\n"
+            f"Waktu: {_dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Host: {socket.gethostname()}\n— Lethica")
+    return tool_send_email(me, f"[Lethica] Projek selesai: {project}", body)
+
+
+def _find_wordlist(wordlist):
+    if wordlist:
+        p = os.path.expanduser(wordlist)
+        if os.path.isfile(p):
+            return p
+    for p in ("/usr/share/wordlists/rockyou.txt", "/usr/share/dict/words",
+              os.path.expanduser("~/rockyou.txt"),
+              os.path.expanduser("~/wordlists/rockyou.txt")):
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+_HASHCAT_CODES = {"md5": "0", "sha1": "100", "sha256": "1400",
+                  "sha512": "1700", "ntlm": "1000", "bcrypt": "3200"}
+
+
+def _detect_hash_type(hv):
+    hv = hv.strip()
+    if hv.startswith(("$2y$", "$2a$", "$2b$")):
+        return "bcrypt"
+    ln = len(hv)
+    if ln == 32:
+        return "md5"  # ntlm bila uppercase — dicek pemanggil
+    if ln == 40:
+        return "sha1"
+    if ln == 64:
+        return "sha256"
+    if ln == 128:
+        return "sha512"
+    return None
+
+
+def tool_crack_hash(hash, type=None, wordlist=None, mode="hash"):
+    """Crack hash string via hashcat, atau file (zip/ssh/dll) via john."""
+    hv = (hash or "").strip()
+    if not hv:
+        return "[crack_hash] arg 'hash' kosong."
+    mode = (mode or "hash").strip().lower()
+    if mode == "file":
+        john = shutil.which("john")
+        if not john:
+            return ("[crack_hash] binary 'john' tidak ditemukan.\n"
+                    "Install: apt install john  (https://www.openwall.com/john/)")
+        wl = _find_wordlist(wordlist)
+        cmd = [john] + ([f"--wordlist={wl}"] if wl else []) + [hv]
+        _progress("Crack file via john...")
+        try:
+            pr = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            show = subprocess.run([john, "--show", hv], capture_output=True, text=True, timeout=30)
+            if "0 password hashes cracked" in show.stdout:
+                log = (pr.stdout + pr.stderr).strip()[:1500]
+                return f"[crack_hash] password tidak ketemu (coba wordlist lain).\nLog:\n{log}"
+            return f"[crack_hash] john --show:\n{show.stdout.strip()[:2000]}"
+        except subprocess.TimeoutExpired:
+            return "[crack_hash] timeout 180s."
+        except Exception as e:
+            return f"[crack_hash] error: {e}"
+    hc = shutil.which("hashcat")
+    if not hc:
+        return ("[crack_hash] binary 'hashcat' tidak ditemukan.\n"
+                "Install: apt install hashcat  (butuh GPU/OpenCL untuk performa penuh)")
+    htype = (type or "").strip().lower() or _detect_hash_type(hv)
+    if htype == "md5" and hv.isupper():
+        htype = "ntlm"
+    code = _HASHCAT_CODES.get(htype or "")
+    if not code:
+        return (f"[crack_hash] tipe hash tidak dikenali: '{type or '?'}'. "
+                "Pilih: md5, sha1, sha256, sha512, ntlm, bcrypt.")
+    wl = _find_wordlist(wordlist)
+    if not wl:
+        return ("[crack_hash] butuh wordlist (arg 'wordlist').\n"
+                "Contoh: /usr/share/wordlists/rockyou.txt — "
+                "tanpa wordlist tool ini menolak jalan (no brute-force default).")
+    _progress(f"Crack {htype} via hashcat...")
+    import tempfile
+    tf = tempfile.NamedTemporaryFile("w", suffix=".hash", delete=False)
+    try:
+        tf.write(hv)
+        tf.close()
+        pr = subprocess.run([hc, "-m", code, tf.name, wl,
+                             "--quiet", "--show", "--potfile-disable"],
+                            capture_output=True, text=True, timeout=180)
+        out = pr.stdout.strip()
+        if out and ":" in out:
+            return f"[crack_hash] PASSWORD KETEMU: {out.split(':')[-1].strip()}\n(tipe: {htype})"
+        err = pr.stderr.strip()[:500]
+        return ("[crack_hash] tidak ketemu / gagal.\n"
+                f"Output:\n{out[:1000]}\n{('Error: ' + err) if err else ''}".rstrip())
+    except subprocess.TimeoutExpired:
+        return "[crack_hash] timeout 180s."
+    except Exception as e:
+        return f"[crack_hash] error: {e}"
+    finally:
+        try:
+            os.unlink(tf.name)
+        except Exception:
+            pass
+
+
+def _pkt_brief(p):
+    try:
+        from scapy.all import IP, TCP, UDP, Raw, DNS, DNSQR
+    except ImportError:
+        return "?"
+    if IP in p:
+        src, dst = p[IP].src, p[IP].dst
+        if TCP in p:
+            info = f"TCP {p[TCP].sport}->{p[TCP].dport}"
+            if Raw in p:
+                try:
+                    info += " | " + p[Raw].load.decode("utf-8", errors="ignore")[:40].replace("\n", " ")
+                except Exception:
+                    info += " | [biner]"
+            return f"{src} -> {dst} | {info}"
+        if UDP in p:
+            info = f"UDP {p[UDP].sport}->{p[UDP].dport}"
+            if DNS in p and p[DNS].qr == 0:
+                try:
+                    info += " | DNS: " + p[DNSQR].qname.decode(errors="ignore")
+                except Exception:
+                    pass
+            return f"{src} -> {dst} | {info}"
+        return f"{src} -> {dst} | proto {p[IP].proto}"
+    return "non-IP"
+
+
+def _proc_conns(count):
+    import struct
+    import socket as _sock
+    def _ip(h):
+        try:
+            return _sock.inet_ntoa(struct.pack("<L", int(h.split(":")[0], 16)))
+        except Exception:
+            return h
+    def _port(h):
+        try:
+            return int(h.split(":")[1], 16)
+        except Exception:
+            return 0
+    states = {"01": "ESTABLISHED", "02": "SYN_SENT", "03": "SYN_RECV",
+              "06": "TIME_WAIT", "0A": "LISTEN"}
+    lines = ["[sniffer] live capture tidak tersedia (butuh root/scapy/tcpdump).",
+             "Koneksi aktif dari /proc:"]
+    n = 0
+    for proto, path in (("TCP", "/proc/net/tcp"), ("UDP", "/proc/net/udp")):
+        try:
+            with open(path) as f:
+                rows = f.read().splitlines()[1:]
+        except Exception:
+            continue
+        for r in rows:
+            if n >= count:
+                break
+            c = r.split()
+            if len(c) < 4:
+                continue
+            tag = f" [{states.get(c[3], c[3])}]" if proto == "TCP" else ""
+            lines.append(f"{proto}{tag} {_ip(c[1])}:{_port(c[1])} -> {_ip(c[2])}:{_port(c[2])}")
+            n += 1
+    if n == 0:
+        lines.append("(tidak ada koneksi terbaca)")
+    return "\n".join(lines)
+
+
+def tool_network_sniffer(interface="any", count=10, filter=""):
+    """Capture paket: scapy → tcpdump → fallback /proc (koneksi aktif)."""
+    try:
+        count = max(1, min(int(count or 10), 50))
+    except Exception:
+        count = 10
+    iface = (interface or "any").strip() or "any"
+    bpf = (filter or "").strip()
+    _progress(f"Sniff {iface} (count {count})...")
+    try:
+        from scapy.all import sniff as _sniff
+        pkts = _sniff(iface=iface if iface != "any" else None, count=count,
+                      filter=bpf or None, timeout=15)
+        if pkts:
+            lines = [f"[sniffer] {len(pkts)} paket (scapy):"]
+            for i, p in enumerate(pkts):
+                lines.append(f"{i + 1}. {_pkt_brief(p)}")
+            return "\n".join(lines)
+    except ImportError:
+        pass
+    except Exception as e:
+        if console:
+            console.print(f"[dim yellow]scapy gagal: {str(e)[:80]}[/dim yellow]")
+    td = shutil.which("tcpdump")
+    if td:
+        try:
+            cmd = [td, "-i", iface, "-c", str(count), "-nn", "-q"] + ([bpf] if bpf else [])
+            pr = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
+            if pr.returncode == 0 and pr.stdout.strip():
+                return f"[sniffer] tcpdump ({iface}):\n{pr.stdout.strip()[:4000]}"
+        except Exception:
+            pass
+    return _proc_conns(count)
+
+
+def tool_android_pentest(args):
+    """Wrapper DroidHunter: jalankan droidhunter.py dengan argumen."""
+    import shlex
+    args = (args or "").strip()
+    if not args:
+        return "[android_pentest] arg 'args' kosong."
+    cands = [os.path.expanduser("~/DroidHunter/droidhunter.py"),
+             "/root/DroidHunter/droidhunter.py",
+             os.path.join(config.WORKSPACE, "DroidHunter", "droidhunter.py"),
+             os.path.abspath("DroidHunter/droidhunter.py")]
+    dh = next((p for p in cands if os.path.isfile(p)), None) or shutil.which("droidhunter")
+    if not dh:
+        return ("[android_pentest] DroidHunter tidak ditemukan.\n"
+                "Taruh di ~/DroidHunter/droidhunter.py atau sediakan binary 'droidhunter' di PATH.")
+    _progress(f"DroidHunter: {args[:60]}")
+    try:
+        base = ["python3", dh] if dh.endswith(".py") else [dh]
+        pr = subprocess.run(base + shlex.split(args), capture_output=True, text=True, timeout=120)
+        out = pr.stdout + ("\n[stderr]\n" + pr.stderr if pr.stderr.strip() else "")
+        out = out.strip()[:4000] or f"(exit {pr.returncode}, tanpa output)"
+        return f"[android_pentest] exit={pr.returncode}\n{out}"
+    except subprocess.TimeoutExpired:
+        return "[android_pentest] timeout 120s."
+    except Exception as e:
+        return f"[android_pentest] error: {e}"
+
+
+def _find_chromium():
+    if os.path.isfile("/data/data/com.termux/files/usr/bin/chromium"):
+        return "/data/data/com.termux/files/usr/bin/chromium"
+    for b in ("chromium", "chromium-browser", "google-chrome", "chrome"):
+        w = shutil.which(b)
+        if w:
+            return w
+    try:
+        base = os.path.expanduser("~/.cache/ms-playwright")
+        if os.path.isdir(base):
+            for d in sorted(os.listdir(base)):
+                for name in ("headless_shell", "chrome-linux/chrome", "chrome-linux/headless_shell"):
+                    p = os.path.join(base, d, name)
+                    if os.path.isfile(p) and os.access(p, os.X_OK):
+                        return p
+    except Exception:
+        pass
+    return None
+
+
+def tool_agent_browser(commands, chromium_path=None):
+    """Browser automation via binary 'agent-browser' (Rust) + chromium."""
+    import shlex
+    cmds = [c.strip() for c in (commands or "").splitlines()
+            if c.strip() and not c.strip().startswith("#")]
+    if not cmds:
+        return "[agent_browser] arg 'commands' kosong."
+    ab = shutil.which("agent-browser")
+    if not ab:
+        return ("[agent_browser] binary 'agent-browser' tidak ditemukan di PATH.\n"
+                "Install: cargo install agent-browser  (https://github.com/vercel-labs/agent-browser)")
+    chrom = (chromium_path or "").strip() or _find_chromium()
+    if not chrom:
+        return "[agent_browser] chromium tidak ketemu. Isi arg 'chromium_path'."
+    _progress(f"agent-browser: {len(cmds)} perintah...")
+    out = []
+    for cmd in cmds:
+        try:
+            pr = subprocess.run([ab, "--executable-path", chrom] + shlex.split(cmd),
+                                capture_output=True, text=True, timeout=120)
+            txt = pr.stdout.strip()
+            if pr.stderr.strip():
+                txt += "\n[stderr]\n" + pr.stderr.strip()
+            out.append(f"$ agent-browser {cmd}\n{(txt.strip() or '(tanpa output)')[:3000]}")
+        except subprocess.TimeoutExpired:
+            out.append(f"$ agent-browser {cmd}\nTIMEOUT 120s")
+        except Exception as e:
+            out.append(f"$ agent-browser {cmd}\nerror: {e}")
+    return "[agent_browser]\n" + "\n\n".join(out)[:6000]
+
+
+def tool_hyperbrowser(task):
+    """Browser cloud stealth via Hyperbrowser (butuh API key)."""
+    import re as _re
+    task = (task or "").strip()
+    if not task:
+        return "[hyperbrowser] arg 'task' kosong."
+    key = os.environ.get("HYPERBROWSER_API_KEY", "").strip()
+    if not key:
+        return ("[hyperbrowser] env HYPERBROWSER_API_KEY belum diset.\n"
+                "Daftar di hyperbrowser.ai, lalu export HYPERBROWSER_API_KEY=<key>.")
+    try:
+        from hyperbrowser import Hyperbrowser
+        from playwright.sync_api import sync_playwright
+    except ImportError as e:
+        return f"[hyperbrowser] lib belum ada: {e}\nInstall: pip install hyperbrowser playwright"
+    _progress("Hyperbrowser cloud (stealth)...")
+    try:
+        hb = Hyperbrowser(api_key=key)
+        sess = hb.sessions.create({"use_stealth": True})
+        out = [f"Task: {task}"]
+        urls = _re.findall(r"https?://[^\s'\"<>,]+", task)
+        with sync_playwright() as p:
+            br = p.chromium.connect_over_cdp(sess.ws_endpoint)
+            pg = br.new_context().new_page()
+            if urls:
+                for u in urls[:5]:
+                    try:
+                        pg.goto(u, timeout=60000)
+                        out.append(f"\nURL: {u}\nTitle: {pg.title()}\n{pg.inner_text('body')[:3000]}")
+                    except Exception as e:
+                        out.append(f"\nURL {u} gagal: {e}")
+            else:
+                pg.goto("https://www.google.com", timeout=60000)
+                pg.fill("textarea[name=q], input[name=q]", task)
+                pg.keyboard.press("Enter")
+                pg.wait_for_timeout(5000)
+                out.append("Search:\n" + pg.inner_text("body")[:3000])
+            br.close()
+        try:
+            hb.sessions.close(sess.id)
+        except Exception:
+            pass
+        return "[hyperbrowser]\n" + "\n".join(out)[:6000]
+    except Exception as e:
+        return f"[hyperbrowser] gagal: {e}"
+
+
 # ── v2.8: stats wrapping (penting: tags.py dispatch harus pakai alias ini) ──
 tool_read_file = stats.wrap("read_file", tool_read_file)
 tool_write_file = stats.wrap("write_file", tool_write_file)
@@ -1087,4 +1673,16 @@ tool_plan = stats.wrap("plan", tool_plan)
 tool_spawn = stats.wrap("spawn", tool_spawn)
 tool_skill = stats.wrap("skill", tool_skill)
 tool_run_code = stats.wrap("run_code", tool_run_code)
+# ── v3.9: port Kiro ──
+tool_phone_lookup = stats.wrap("phone_lookup", tool_phone_lookup)
+tool_gps = stats.wrap("gps", tool_gps)
+tool_image_vision = stats.wrap("image_vision", tool_image_vision)
+tool_send_email = stats.wrap("send_email", tool_send_email)
+tool_read_inbox = stats.wrap("read_inbox", tool_read_inbox)
+tool_notify_project = stats.wrap("notify_project", tool_notify_project)
+tool_crack_hash = stats.wrap("crack_hash", tool_crack_hash)
+tool_network_sniffer = stats.wrap("network_sniffer", tool_network_sniffer)
+tool_android_pentest = stats.wrap("android_pentest", tool_android_pentest)
+tool_agent_browser = stats.wrap("agent_browser", tool_agent_browser)
+tool_hyperbrowser = stats.wrap("hyperbrowser", tool_hyperbrowser)
 
