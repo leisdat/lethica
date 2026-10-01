@@ -66,3 +66,6 @@ _dbg_*.py
 .lethica_history
 skills/generated/
 
+
+# marker lokal: bridge Telegram dimatikan (jangan commit)
+.bridge-disabled
