@@ -136,7 +136,7 @@ _DERIVED = [
     ("DEFAULT_BASE",    ("server", "base", None)),
     ("API_KEY",         ("server", "key", None)),
     ("DEFAULT_MODEL",   ("model", "default", None)),
-    ("MAX_TOKENS",      ("model", "max_tokens", 4096), int),
+    ("MAX_TOKENS",      ("model", "max_tokens", 16384), int),
     ("TEMPERATURE",     ("model", "temperature", 0.4), float),
     ("MAX_TOOL_ROUNDS", ("model", "max_tool_rounds", 8), int),
     ("MAX_CONTINUE_ROUNDS", ("model", "max_continue_rounds", 12), int),
