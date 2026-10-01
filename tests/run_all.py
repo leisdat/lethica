@@ -16,7 +16,6 @@ TESTS = [
     "test_v34_evolution.py",
     "test_v37_toolcalling.py",
     "test_v371_memorydb.py",
-    "test_v38_plan_subagent.py",
 ]
 def main():
     total_fail = 0

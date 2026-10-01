@@ -626,10 +626,6 @@ def dispatch(reply, agent_path):
         matched.append((m.start(), m.end()))
         a = _parse_tag_attrs(m.group(1))
         outputs.append(f"[memory]\n{tools.tool_memory(a.get('action'), _unesc(a['key']) if a.get('key') else None, _unesc(a['content']) if a.get('content') else None)}")
-    for m in tools.PLAN_TAG_RE.finditer(reply):
-        matched.append((m.start(), m.end()))
-        a = _parse_tag_attrs(m.group(1))
-        outputs.append(f"[plan]\n{tools.tool_plan(a.get('action'), _unesc(a['content']) if a.get('content') else None)}")
     for m in rag.RAG_TAG_RE.finditer(reply):
         matched.append((m.start(), m.end()))
         a = _parse_tag_attrs(m.group(1))

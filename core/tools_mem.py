@@ -77,40 +77,6 @@ def memory_bank_summary():
         return ""
 
 
-def plan_file():
-    return os.path.join(config.PLAN_DIR, "active-plan.md")
-
-
-def tool_plan(action, content=None):
-    """Plan mode: save / append / show / clear."""
-    action = (action or "show").lower()
-    pf = plan_file()
-    if action == "save":
-        if not content:
-            return "Error plan save: butuh content."
-        content = content.replace("\\n", "\n")
-        with open(pf, "w", encoding="utf-8") as f:
-            f.write(f"# Active Plan\n{content}\n")
-        return f"OK plan saved: {pf}"
-    if action == "append":
-        if not content:
-            return "Error plan append: butuh content."
-        with open(pf, "a", encoding="utf-8") as f:
-            f.write(content.replace("\\n", "\n") + "\n")
-        return "OK plan appended."
-    if action == "show":
-        if not os.path.isfile(pf):
-            return "(no active plan)"
-        with open(pf, encoding="utf-8") as f:
-            return f.read()[:3000]
-    if action == "clear":
-        if os.path.isfile(pf):
-            os.remove(pf)
-            return "OK plan cleared."
-        return "(no active plan)"
-    return f"Error plan: unknown action '{action}'."
-
-
 # ── v2.9: skill loader (Hermes skills di ~/lethica/skills/) ──
 SKILL_DIR = os.path.join(config.LETHICA_DIR, "skills")
 # index nama->path di-build sekali

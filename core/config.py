@@ -153,7 +153,6 @@ _DERIVED = [
     ("SHOW_REASONING",   ("model", "show_reasoning", False)),
     ("AUTOLOAD_SKILLS",  ("skills", "autoload", []), list),
     ("NATIVE_FC",        ("model", "native_function_calling", True)),
-    ("PLAN_MODE",        ("model", "plan_mode", "auto"), str),
     ("SUBAGENT_MAX_ROUNDS", ("model", "subagent_max_rounds", 4), int),
     ("SUBAGENT_MAX_WORKERS", ("model", "subagent_max_workers", 4), int),
      # v3.8 UI
@@ -194,7 +193,6 @@ FIRST_DATA_TIMEOUT = _d0["FIRST_DATA_TIMEOUT"]
 LEG_TOTAL_TIMEOUT, ENTRY_BUDGET = _d0["LEG_TOTAL_TIMEOUT"], _d0["ENTRY_BUDGET"]
 FAILOVER_CHAIN, STREAM, SHOW_REASONING = _d0["FAILOVER_CHAIN"], _d0["STREAM"], _d0["SHOW_REASONING"]
 AUTOLOAD_SKILLS = _d0["AUTOLOAD_SKILLS"]
-PLAN_MODE = _d0["PLAN_MODE"]
 SUBAGENT_MAX_ROUNDS, SUBAGENT_MAX_WORKERS = _d0["SUBAGENT_MAX_ROUNDS"], _d0["SUBAGENT_MAX_WORKERS"]
 NATIVE_FC = _d0["NATIVE_FC"]
 VERBOSE, BANNER = _d0["VERBOSE"], _d0["BANNER"]

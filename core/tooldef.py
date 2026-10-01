@@ -96,13 +96,6 @@ TOOL_DEFS = {
             "key": ("string", False, "Kunci entri"),
             "content": ("string", False, "Isi untuk save"),
         }),
-    "plan": dict(
-        fn="tool_plan", icon="🗺️",
-        desc="Plan mode.",
-        params={
-            "action": (("save", "append", "show", "clear"), False, "Aksi plan, default show"),
-            "content": ("string", False, "Isi plan"),
-        }),
     "rag": dict(
         fn="tool_rag", icon="📚",
         desc="Full-text search FTS5 semua file project.",
@@ -225,7 +218,7 @@ TOOL_DEFS = {
 # (read dulu, exec belakangan — determinisme output dipertahankan).
 EXEC_ORDER = ["read_file", "write_file", "edit_file", "list_dir", "search_content",
               "http_request", "download_file", "web_search", "browse", "memory",
-              "plan", "rag", "exec", "run_code", "task", "spawn", "skill",
+              "rag", "exec", "run_code", "task", "spawn", "skill",
               # v3.9 port Kiro: baca-ish dulu, lalu yang butuh env/binary, exec-ish paling akhir
               "phone_lookup", "gps", "image_vision", "send_email", "read_inbox",
               "notify_project", "agent_browser", "hyperbrowser",

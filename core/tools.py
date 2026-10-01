@@ -71,7 +71,6 @@ DL_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 MEMORY_TAG_RE = re.compile(r'<memory\s+([^>]*?)/?>', re.IGNORECASE)
-PLAN_TAG_RE = re.compile(r'<plan\s+([^>]*?)/?>', re.IGNORECASE)
 SPAWN_TAG_RE = re.compile(r'<spawn\s+([^>]*?)/?>', re.IGNORECASE)
 WEBSEARCH_TAG_RE = re.compile(r'<web_search\s+([^>]*?)/?>', re.IGNORECASE)
 BROWSE_TAG_RE = re.compile(r'<browse\s+([^>]*?)/?>', re.IGNORECASE)
@@ -859,40 +858,6 @@ def memory_bank_summary():
         return ""
 
 
-def plan_file():
-    return os.path.join(config.PLAN_DIR, "active-plan.md")
-
-
-def tool_plan(action, content=None):
-    """Plan mode: save / append / show / clear."""
-    action = (action or "show").lower()
-    pf = plan_file()
-    if action == "save":
-        if not content:
-            return "Error plan save: butuh content."
-        content = content.replace("\\n", "\n")
-        with open(pf, "w", encoding="utf-8") as f:
-            f.write(f"# Active Plan\n{content}\n")
-        return f"OK plan saved: {pf}"
-    if action == "append":
-        if not content:
-            return "Error plan append: butuh content."
-        with open(pf, "a", encoding="utf-8") as f:
-            f.write(content.replace("\\n", "\n") + "\n")
-        return "OK plan appended."
-    if action == "show":
-        if not os.path.isfile(pf):
-            return "(no active plan)"
-        with open(pf, encoding="utf-8") as f:
-            return f.read()[:3000]
-    if action == "clear":
-        if os.path.isfile(pf):
-            os.remove(pf)
-            return "OK plan cleared."
-        return "(no active plan)"
-    return f"Error plan: unknown action '{action}'."
-
-
 def _parse_spawn_tasks(raw):
     """Parse arg tasks → list [{"name","task"}].
     Format 1 (JSON): [{"name":"riset-a","task":"..."}, ...] atau {"tasks":[...]}
@@ -1669,7 +1634,6 @@ tool_self_check = stats.wrap("self_check", tool_self_check)
 tool_web_search = stats.wrap("web_search", tool_web_search)
 tool_browse = stats.wrap("browse", tool_browse)
 tool_memory = stats.wrap("memory", tool_memory)
-tool_plan = stats.wrap("plan", tool_plan)
 tool_spawn = stats.wrap("spawn", tool_spawn)
 tool_skill = stats.wrap("skill", tool_skill)
 tool_run_code = stats.wrap("run_code", tool_run_code)

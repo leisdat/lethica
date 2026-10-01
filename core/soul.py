@@ -276,21 +276,6 @@ def _skills_block():
     return "\n".join(lines) + "\n"
 
 
-def _plan_block():
-    plan_path = tools.plan_file()
-    if not os.path.isfile(plan_path):
-        return ""
-    try:
-        with open(plan_path, encoding="utf-8") as f:
-            content = f.read()[:1500]
-        return (
-            "\n\n## ACTIVE PLAN (update via <plan action=\"append\" ... /> "
-            "tiap step selesai)\n" + content + "\n"
-        )
-    except Exception:
-        return ""
-
-
 # ── Operating rules (runtime) — dipakai bridge & TUI ────────────────
 
 def _operating_rules():
@@ -337,11 +322,10 @@ Native file tools:
 - `<http_request url="..." method="GET" body='...' headers='{{"X-Key":"val"}}' />`
 - `<download_file url="..." output="~/lethica/workspace/file.txt" />`
 
-### Web, browser, memory, plan
+### Web, browser, memory
 - `<web_search query="..." limit="5" />` — search web (Bing → DDG lite fallback). Pakai ini SEBELUM menjawab pertanyaan fakta/update.
 - `<browse url="https://..." />` atau `<browse url="..." data="a=b&c=d" method="POST" />` — browser session dengan cookie jar persist.
 - `<memory action="save|load|search|forget" key="nama" content="isi" />` — memory bank permanen.
-- `<plan action="save|append|show|clear" content="..." />` — plan mode. Task kompleks: WAJIB bikin plan dulu.
 - `<spawn tasks='[{{"name":"riset-a","task":"..."}},{{"name":"riset-b","task":"..."}}]' max_rounds="4" />` — SUB-AGENT PARALEL: delegasikan subtask INDEPENDEN ke N agent mini yang jalan bareng (maks 8). Hasil diagregat otomatis jadi jawaban final. Sub-agent tidak boleh spawn lagi. Pakai untuk riset multi-sudut / task yang bisa dipecah.
 - `<rag action="search|rebuild|stats" query="kata kunci" />` — full-text search semua file (FTS5). Untuk "di file mana X" → RAG dulu.
 
@@ -363,13 +347,8 @@ pesan "tidak ditemukan / belum diset", SAMPAIKAN ke user apa yang kurang — jan
 ### Protokol eksekusi (anti-stuck)
 1. **Jangan berhenti di tengah task.** Tiap menerima hasil tool, WAJIB lanjut ke langkah berikut ATAU tutup dengan laporan akhir yang jelas. Dilarang diam / nunggu tanpa output.
 2. **Lapor sebelum tool berat.** Sebelum crack_hash, network_sniffer, agent_browser, hyperbrowser, atau exec yang lama → 1 baris dulu: apa yang mau dijalankan & kenapa.
-3. **Plan dulu untuk multi-step.** Task >3 langkah → susun daftar langkah singkat dulu (pakai `<plan>` kalau kompleks / butuh approval), eksekusi satu per satu, update tiap langkah selesai.
+3. **Bagi task multi-step jadi langkah.** Task >3 langkah → tulis daftar langkah singkat di balasan (prose biasa, bukan tool), eksekusi satu per satu. Jangan bikin gate approval — langsung jalan.
 4. **Jangan tanya balik di tengah eksekusi** kecuali keputusan kritis/berisiko (hapus data, kirim ke pihak ketiga, biaya). Selain itu: jalan terus sampai tuntas.
-
-### Plan mode (approval gate)
-- PLAN_MODE di config.toml `[model]`: `off` | `auto` | `always`. `auto` = task terdeteksi otomatis → plan dulu.
-- Alur: plan disusun & disimpan → DITAMPILKAN ke user → user balas "gas"/"ok" = eksekusi, revisi = perbaiki plan, "batal" = stop. JANGAN eksekusi sebelum approval.
-- Setelah approval, eksekusi langkah demi langkah, update via `<plan action="append" ... />` tiap langkah selesai.
 
 ### Token ekonomi (v2.5)
 - Usage token di-log otomatis per call. Operator cek via /tokens.
@@ -379,7 +358,6 @@ pesan "tidak ditemukan / belum diset", SAMPAIKAN ke user apa yang kurang — jan
 - Sandbox workspace: `~/lethica/workspace/`
 - Custom tools/scripts: `~/lethica/workspace/tools/`
 - Memory bank: `~/lethica/memory/`
-- Plans: `~/lethica/workspace/plans/`
 - History: `~/lethica/history.json`
 - Config: `~/lethica/config.toml`
 - Backup self: `~/lethica/backups/`
@@ -400,7 +378,7 @@ Versi saat ini: v{config.VERSION}
 def build_system_prompt():
     """Assemblage: persona + dynamic blocks + operating rules."""
     soul = _persona_text()
-    sp = f"{soul}{_memory_block()}{_rag_block()}{_skills_block()}{_plan_block()}\n---\n\n{_operating_rules()}"
+    sp = f"{soul}{_memory_block()}{_rag_block()}{_skills_block()}\n---\n\n{_operating_rules()}"
     # Prompt aslinya ditulis untuk layout Termux (~/lethica). Di mesin lain,
     # ganti dengan path repo sebenarnya biar agent tidak dikasih path bohong.
     return sp.replace("~/lethica", config.LETHICA_DIR)
