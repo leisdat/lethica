@@ -1,3 +1,21 @@
+## v3.9.1 - fix: bridge crash setelah plan mode dihapus upstream (2026-10-01)
+**Konteks:** pull origin/main (`d6eea8c` "Hapus plan mode total") hapus `core/planmode.py` +
+gate/prompt plan, TAPI `lethica_bridge.py` gak disentuh → masih import `core.planmode`
+(tiap start bridge = `ModuleNotFoundError: No module named 'core.planmode'`).
+
+**lethica_bridge.py**
+- Hapus `from core import planmode` dari `_run_agent_turn` + `on_text`.
+- Hapus gate plan_pending (`should_draft`/`draft_plan`) di `_run_agent_turn` — langsung eksekusi.
+- Hapus `cmd_planmode` + handler `CommandHandler("planmode", ...)`.
+- Hapus blok pending_plan (approve/reject/revise) di `on_text`.
+- Hapus dead code `_plan_prompt_text`/`_show_plan`.
+- Hapus `pending_plan`/`pending_goal` dari state default + save/load.
+- Hapus parameter `plan_approved` (gak kepake lagi).
+- HELP_TEXT: buang baris plan mode; tool list hapus `plan`.
+
+**Verifikasi:** `grep planmode` di bridge = 0; `py_compile` OK; `import lethica` OK
+(bukti runtime, bukan klaim).
+
 ## v3.9.0 - fix: default model mati + timeout + Mode 5 noun-trigger refusal killer (2026-09-30)
 **Konteks:** audit live (run + jailbreak test) nemu 3 hal: (1) `[model] default = qwen-3.8-flash-max`
 GAK ADA di provider dahl (dahl cuma MiniMax-M2.7 / GLM-5.3-Flash / DeepSeek-V4-Flash-0731) → tiap

@@ -75,8 +75,6 @@ def _default_state():
     return {
         "messages": [{"role": "system", "content": lethica.build_system_prompt()}],
         "model": lethica.DEFAULT_MODEL,
-        "pending_plan": None,  # plan text menunggu approval (plan mode)
-        "pending_goal": None,  # goal asal plan pending (untuk revisi)
     }
 
 
@@ -96,8 +94,7 @@ def _save_state():
         payload = {}
         for cid, st in CHATS.items():
             msgs = [m for m in st["messages"] if m.get("role") != "system"]
-            payload[str(cid)] = {"model": st["model"], "messages": msgs,
-                                 "pending_plan": st.get("pending_plan")}
+            payload[str(cid)] = {"model": st["model"], "messages": msgs}
         with open(CHATS_FILE, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False)
     except Exception:
@@ -118,7 +115,6 @@ def _load_state():
             CHATS[int(cid) if cid.isdigit() else cid] = {
                 "messages": msgs,
                 "model": st.get("model", lethica.DEFAULT_MODEL),
-                "pending_plan": st.get("pending_plan"),
             }
     except Exception:
         pass
@@ -131,25 +127,18 @@ def _fmt_tool_results(out, limit=1800):
 
 # ── Agent loop ──────────────────────────────────────────────────────
 
-def _run_agent_turn(messages, model, user_text, progress_cb=None, plan_approved=False):
+def _run_agent_turn(messages, model, user_text, progress_cb=None):
     """Sinkron agent loop. Return (final_text, used, status).
-    status: done | plan_pending | failed.
+    status: done | failed.
     progress_cb(round_idx, kind, info) untuk status ke TG.
     v3.7: pakai core.tooldef schema (native FC kalau provider dukung, auto-degrade)
-    + dispatcher tervalidasi lethica.tags — TOOL_TAG_RE manual dibuang."""
+    + dispatcher tervalidasi lethica.tags — TOOL_TAG_RE manual dibuang.
+    v3.9.1: plan mode dihapus total upstream — gate plan_pending dibuang."""
     from core import tooldef as _tooldef
-    from core import planmode as _planmode
     messages.append({"role": "user", "content": user_text})
     final_text = None
     used = None
     last_reply = None
-    # ── PLAN MODE gate: task terdeteksi → susun plan, STOP, tunggu approval ──
-    # v3.8.1: draft_plan return None kalau model gagal total → skip gate,
-    # eksekusi langsung (user minta kerja, bukan pesan error).
-    if _planmode.should_draft(user_text, plan_approved=plan_approved):
-        plan_text, pused = _planmode.draft_plan(user_text, model, CLIENT)
-        if plan_text is not None:
-            return plan_text, pused, "plan_pending"
     rounds = max(1, int(lethica.MAX_TOOL_ROUNDS))
     tools_payload = _tooldef.openai_tools() if getattr(lethica.config, "NATIVE_FC", False) else None
     for i in range(rounds):
@@ -218,14 +207,14 @@ def _run_agent_turn(messages, model, user_text, progress_cb=None, plan_approved=
     return final_text, used, "done"
 
 
-async def _agent_turn(chat_id, user_text, progress_cb=None, plan_approved=False):
+async def _agent_turn(chat_id, user_text, progress_cb=None):
     """Jalankan agent loop (sinkron, di thread executor) → return (final, used, status)."""
     state = _chat(chat_id)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         None,
         functools.partial(_run_agent_turn, state["messages"], state["model"],
-                          user_text, progress_cb, plan_approved))
+                          user_text, progress_cb))
 
 
 # ── Reply helpers ───────────────────────────────────────────────────
@@ -287,13 +276,10 @@ async def _keepalive(ctx, chat_id, status_msg, t0, last_edit=None):
 
 HELP_TEXT = (
     "🤖 *Lethica* online — agent loop + tools via 9Router\n\n"
-    "Kirim chat bebas, aku jalankan agent (web\\_search, browse, memory, plan, rag, file, shell).\n\n"
-    "📋 *Plan mode* aktif (auto): task terdeteksi → aku susun rencana dulu, "
-    "balas *gas* untuk eksekusi.\n"
+    "Kirim chat bebas, aku jalankan agent (web\\_search, browse, memory, rag, file, shell).\n\n"
     "🚀 *Sub-agent paralel*: task besar otomatis kupecah ke agent mini yang jalan bareng.\n\n"
     "/new — reset percakapan\n/model — info model aktif + failover chain\n"
-    "/model &lt;nama&gt; — ganti model chat ini\n/planmode off|auto|always — atur plan mode\n"
-    "/status — statistik\n/help — ini")
+    "/model &lt;nama&gt; — ganti model chat ini\n/status — statistik\n/help — ini")
 
 
 async def cmd_start(update: Update, ctx):
@@ -335,19 +321,6 @@ async def cmd_help(update: Update, ctx):
     await cmd_start(update, ctx)
 
 
-async def cmd_planmode(update: Update, ctx):
-    """Toggle plan mode: /planmode off|auto|always"""
-    arg = (ctx.args[0] if ctx.args else "").lower() if hasattr(ctx, "args") and ctx.args else ""
-    if arg in ("off", "auto", "always"):
-        lethica.config.PLAN_MODE = arg
-        await update.message.reply_text(f"✓ plan mode → *{arg}*", parse_mode="Markdown")
-        return
-    await update.message.reply_text(
-        f"Plan mode: *{lethica.config.PLAN_MODE}*\n"
-        "Pakai: /planmode off|auto|always\n"
-        "• off — langsung eksekusi\n• auto — task terdeteksi → plan dulu, tunggu approval\n• always — semua pesan → plan dulu",
-        parse_mode="Markdown")
-
 
 async def _finish_turn(update, status_msg, final, used, t0):
     """Kirim hasil akhir turn ke chat (dipakai alur normal & post-approval)."""
@@ -361,37 +334,7 @@ async def _finish_turn(update, status_msg, final, used, t0):
     await _edit_or_send(update, status_msg, f"🤖 _{used} · {dt:.0f}s_\n\n{final}")
 
 
-def _plan_prompt_text(plan_text):
-    return (f"📋 *Rencana kerja:*\n\n{plan_text}\n\n"
-            "Balas *gas* untuk eksekusi, kirim revisi kalau mau diubah, atau *batal*.")
-
-
-async def _show_plan(update, status_msg, plan_text):
-    """Tampilkan plan pending approval (split kalau kepanjangan)."""
-    body = _plan_prompt_text(plan_text)
-
-    async def _send_md(text):
-        try:
-            await status_msg.edit_text(text, parse_mode="Markdown")
-        except Exception:
-            await update.message.reply_text(text, parse_mode="Markdown")
-
-    if len(body) <= MAX_REPLY:
-        await _send_md(body)
-        return
-    try:
-        await status_msg.edit_text("📋 *Rencana kerja:* (lanjut di bawah)", parse_mode="Markdown")
-    except Exception:
-        pass
-    for i in range(0, len(plan_text), MAX_REPLY):
-        await update.message.reply_text(plan_text[i:i + MAX_REPLY], parse_mode=None)
-    await update.message.reply_text(
-        "Balas *gas* untuk eksekusi, kirim revisi kalau mau diubah, atau *batal*.",
-        parse_mode="Markdown")
-
-
 async def on_text(update: Update, ctx):
-    from core import planmode as _planmode
     chat_id = update.effective_chat.id
     if AUTHORIZED is not None and chat_id not in AUTHORIZED:
         await update.message.reply_text("⛔ unauthorized.")
@@ -400,53 +343,6 @@ async def on_text(update: Update, ctx):
     if not user_text:
         return
     state = _chat(chat_id)
-
-    # ── PLAN MODE: ada plan menunggu approval ──
-    if state.get("pending_plan"):
-        verdict = _planmode.check_approval(user_text)
-        if verdict == "approve":
-            plan_text = state["pending_plan"]
-            state["pending_plan"] = None
-            status_msg = await update.message.reply_text("🚀 plan disetujui, eksekusi…",
-                                                         parse_mode=None)
-            t0 = time.time()
-            ka_task = asyncio.get_running_loop().create_task(
-                _keepalive(ctx, chat_id, status_msg, t0))
-            try:
-                final, used, _st = await _agent_turn(
-                    chat_id, _planmode.approval_message(plan_text),
-                    None, plan_approved=True)
-            except Exception as e:
-                ka_task.cancel()
-                await _edit_or_send(update, status_msg, f"⚠ agent error: {e}"[:MAX_REPLY])
-                return
-            ka_task.cancel()
-            await _finish_turn(update, status_msg, final, used, t0)
-            return
-        if verdict == "reject":
-            state["pending_plan"] = None
-            try:
-                lethica.tool_plan("clear")
-            except Exception:
-                pass
-            _save_state()
-            await update.message.reply_text("Plan dibatalkan. 👍", parse_mode=None)
-            return
-        # revise → susun ulang plan dengan feedback user
-        status_msg = await update.message.reply_text("📝 revisi plan…", parse_mode=None)
-        loop = asyncio.get_running_loop()
-        try:
-            new_plan, _u = await loop.run_in_executor(
-                None, lambda: _planmode.draft_plan(
-                    state.get("pending_goal") or user_text, state["model"], CLIENT,
-                    context=f"Feedback user untuk revisi: {user_text}"))
-        except Exception as e:
-            await _edit_or_send(update, status_msg, f"⚠ gagal revisi plan: {e}"[:MAX_REPLY])
-            return
-        state["pending_plan"] = new_plan
-        _save_state()
-        await _show_plan(update, status_msg, new_plan)
-        return
 
     await ctx.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     t0 = time.time()
@@ -479,13 +375,6 @@ async def on_text(update: Update, ctx):
             ka_task.cancel()
     except Exception as e:
         await _edit_or_send(update, status_msg, f"⚠ agent error: {e}"[:MAX_REPLY])
-        return
-    # ── PLAN MODE: plan butuh approval ──
-    if status == "plan_pending":
-        state["pending_plan"] = final
-        state["pending_goal"] = user_text
-        _save_state()
-        await _show_plan(update, status_msg, final)
         return
     await _finish_turn(update, status_msg, final, used, t0)
 
@@ -522,7 +411,6 @@ def _register_handlers(app):
     app.add_handler(CommandHandler("new", cmd_new))
     app.add_handler(CommandHandler("model", cmd_model))
     app.add_handler(CommandHandler("status", cmd_status))
-    app.add_handler(CommandHandler("planmode", cmd_planmode))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
