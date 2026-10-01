@@ -4,7 +4,7 @@
 
 ### *The Intelligent Adaptive Knowledge System*
 
-[![Version](https://img.shields.io/badge/version-3.8.0-gold)](https://github.com/leisdat/lethica)
+[![Version](https://img.shields.io/badge/version-3.9.0-gold)](https://github.com/leisdat/lethica)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Status](https://img.shields.io/badge/status-stable-success)](https://github.com/leisdat/lethica/releases)
 
