@@ -172,7 +172,7 @@ def run_agent_turn(messages, model, max_rounds=None, client=None):
             if content:
                 amsg["content"] = content
             messages.append(amsg)
-            if content:
+            if content and not config.STREAM:
                 ui.render_md(tags.strip_tags(content), used)
             ui.tool_line([_tc_name(tc) for tc in native_calls])
             results = tags.dispatch_calls_list(native_calls, config.SELF_PATH)
