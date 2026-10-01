@@ -158,7 +158,7 @@ _DERIVED = [
     ("SUBAGENT_MAX_WORKERS", ("model", "subagent_max_workers", 4), int),
      # v3.8 UI
      ("VERBOSE",          ("ui", "verbose", False)),
-     ("BANNER",           ("ui", "banner", "compact"), str),
+     ("BANNER",           ("ui", "banner", "full"), str),
 ]
 
 

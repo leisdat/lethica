@@ -476,46 +476,63 @@ def _cmd_self():
 # ── main loop ───────────────────────────────────────────────────────
 
 def _boot_maintenance():
-    """Maintenance startup → list string ringkas (v3.8). Default digabung jadi
-    SATU baris oleh ui.startup_summary; VERBOSE=true → satu baris per item."""
-    out = []
+    """Maintenance startup → list of (label, ok, detail) untuk ui.startup_summary.
+
+    ok: True sukses, False gagal, None warning. Urutan boot tetap:
+    backup → rag rebuild → requality → mem → graph. Dict mentah (mis. hasil
+    graph.validate()) tidak pernah diteruskan apa adanya — hanya hitungan
+    non-nol yang berarti yang ditampilkan sebagai warning.
+    """
+    items = []
+
+    def _err(e):
+        return f"{type(e).__name__}: {e}"[:60]
+
+    def _rag_detail(rb):
+        m = re.search(r"(\d+)\s+files?,\s+(\d+)\s+chunks?", str(rb or ""))
+        if m:
+            return f"{m.group(1)}f/{m.group(2)}c"
+        return str(rb or "")[:40]
+
     try:
-        if tools.backup_self():
-            out.append("backup ok")
-    except Exception:
-        pass
+        items.append(("backup", bool(tools.backup_self()), ""))
+    except Exception as e:
+        items.append(("backup", False, _err(e)))
     try:
-        rb = rag.tool_rag("rebuild")
-        if rb:
-            out.append(str(rb)[:48])
-    except Exception:
-        pass
+        items.append(("rag", True, _rag_detail(rag.tool_rag("rebuild"))))
+    except Exception as e:
+        items.append(("rag", False, _err(e)))
     try:
         from core import experience
         n = experience.requality()
         if n:
-            out.append(f"requality {n}")
-    except Exception:
-        pass
+            items.append(("requality", True, str(n)))
+    except Exception as e:
+        items.append(("requality", False, _err(e)))
     try:
         from core import memory as semantic_mem
-        c = semantic_mem.consolidate()
-        d = semantic_mem.decay()
-        if c or d:
-            out.append(f"mem c{c}/d{d}")
-    except Exception:
-        pass
+        cc = semantic_mem.consolidate()
+        dd = semantic_mem.decay()
+        if cc or dd:
+            items.append(("mem", True, f"c{cc}/d{dd}"))
+    except Exception as e:
+        items.append(("mem", False, _err(e)))
     try:
         from core import world as world_mod, graph as graph_mod
-        fr = world_mod.refresh()
-        issues = graph_mod.validate()
-        out.append(f"graph {len(graph_mod._nodes())}n/{len(graph_mod._edges())}e "
-                   f"stale={fr.get('stale', 0)}")
+        fr = world_mod.refresh() or {}
+        detail = f"{len(graph_mod._nodes())}n/{len(graph_mod._edges())}e"
+        if fr.get("stale"):
+            detail += f" stale={fr['stale']}"
+        items.append(("graph", True, detail))
+        issues = graph_mod.validate() or {}
         if not issues.get("ok"):
-            out.append(f"graph issues {issues.get('counts')}")
-    except Exception:
-        pass
-    return out
+            bad = ", ".join(f"{k}={v}"
+                            for k, v in (issues.get("counts") or {}).items() if v)
+            if bad:
+                items.append(("graph", None, bad))
+    except Exception as e:
+        items.append(("graph", False, _err(e)))
+    return items
 
 
 def main():
@@ -526,9 +543,9 @@ def main():
     ui.setup_readline()
     boot = _boot_maintenance()
     if ui.load_latest_snapshot():
-        boot.append("hydrated")
+        boot.append(("sesi", True, ""))
     ui.startup_summary(boot)
-    ui.status_line(model=model)
+    ui.workspace_line()
     console.print(f"[{ui.c('muted')}]/help buat daftar command[/{ui.c('muted')}]\n")
     messages = _new_messages()
 

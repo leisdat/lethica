@@ -111,20 +111,41 @@ def show_logo(model=None):
         return
     n_tools = _tool_count()
     if mode == "full":
-        head = Text("L E T H I C A", style=f"bold {c('brand')}", justify="center")
-        sub = (f"[bold {c('accent')}]{config.PERSONA_MODE.upper()}[/bold {c('accent')}]"
-               f" [{c('muted')}]•[/{c('muted')}] v{config.VERSION}"
-               f" [{c('muted')}]•[/{c('muted')}] {n_tools} tools"
-               f" [{c('muted')}]•[/{c('muted')}] {config.ACTIVE_PROVIDER}")
+        # Panel sempit-aman: ASCII art cuma kalau layar cukup lebar (>=56),
+        # kalau tidak pakai header huruf renggang. Panel rich otomatis
+        # menyesuaikan lebar console (aman di 40 kolom).
+        lines = []
+        if console.width >= 56:
+            lines.append(Text(LOGO.strip("\n"), style=c("brand"), justify="center"))
+        else:
+            lines.append(Text("L E T H I C A", style=f"bold {c('brand')}",
+                             justify="center"))
+        info = Text(justify="center")
+        info.append(f"v{config.VERSION}", style=c("muted"))
+        info.append(" · ", style=c("muted"))
+        info.append(str(config.PERSONA_MODE), style=f"bold {c('accent')}")
+        info.append(" · ", style=c("muted"))
+        info.append(f"{n_tools} tools", style=c("muted"))
+        lines.append(info)
+        sub = Text(justify="center")
+        sub.append(str(config.ACTIVE_PROVIDER), style=c("muted"))
         if model:
-            sub += f" [{c('muted')}]•[/{c('muted')}] [{c('ok')}]{model}[/{c('ok')}]"
+            combined = f"{config.ACTIVE_PROVIDER} · {model}"
+            if len(combined) > console.width - 6:
+                # layar sempit: provider & model di baris sendiri-sendiri
+                lines.append(sub)
+                lines.append(Text(str(model), style=c("ok"), justify="center"))
+            else:
+                sub.append(" · ", style=c("muted"))
+                sub.append(str(model), style=c("ok"))
+                lines.append(sub)
+        else:
+            lines.append(sub)
         console.print(Panel(
-            Group(head, Text(LOGO.strip("\n"), style=c("brand"), justify="center")),
+            Group(*lines),
             title=f"[bold {c('accent')}]◆ Lethica[/bold {c('accent')}]",
-            subtitle=sub,
             border_style=c("brand"),
-            box=box.DOUBLE,
-            padding=(1, 2),
+            padding=(0, 1),
         ))
         return
     # compact: 1 baris, hemat ruang vertikal di HP
@@ -162,16 +183,65 @@ def status_line(model=None, extra=None, tools=None):
 
 
 def startup_summary(items):
-    """Ringkas log maintenance startup jadi SATU baris (v3.8).
-    VERBOSE=true → satu baris per item (buat debugging)."""
-    items = [str(i) for i in (items or []) if i]
-    if not items:
+    """Render hasil _boot_maintenance(): list of (label, ok, detail).
+
+    ok=True sukses, False gagal, None warning. String polos tetap diterima
+    (dianggap sukses) untuk kompatibilitas.
+    Semua OK → SATU baris ringkas. Ada gagal/warning → per baris ber-icon.
+    Dict mentah tidak pernah di-dump ke layar.
+    VERBOSE=true → satu baris per item (tetap rapi).
+    """
+    norm = []
+    for it in (items or []):
+        if isinstance(it, (list, tuple)):
+            label = str(it[0]) if len(it) > 0 else ""
+            ok = it[1] if len(it) > 1 else True
+            detail = str(it[2]) if len(it) > 2 and it[2] else ""
+        else:
+            label, ok, detail = str(it), True, ""
+        if label:
+            norm.append((label, ok, detail))
+    if not norm:
         return
+    oks = [(l, d) for l, o, d in norm if o is True]
+    warns = [(l, d) for l, o, d in norm if o is None]
+    fails = [(l, d) for l, o, d in norm if o is False]
+
+    def _short(pairs):
+        return " · ".join(f"{l} {d}".strip() for l, d in pairs)
+
     if getattr(config, "VERBOSE", False):
-        for it in items:
-            console.print(f"[{c('muted')}]· {it}[/{c('muted')}]")
+        for l, d in oks:
+            console.print(f"[{c('ok')}]✓ {l}[/{c('ok')}]"
+                          + (f" [{c('muted')}]{d}[/{c('muted')}]" if d else ""))
+        for l, d in warns:
+            console.print(f"[{c('warn')}]⚠ {l}: {d}[/{c('warn')}]")
+        for l, d in fails:
+            console.print(f"[{c('err')}]✗ {l}[/{c('err')}]"
+                          + (f" [{c('muted')}]{d}[/{c('muted')}]" if d else ""))
         return
-    console.print(f"[{c('muted')}]✓ {' · '.join(items)}[/{c('muted')}]")
+    if oks and not warns and not fails:
+        console.print(f"[{c('muted')}]✓ siap — {_short(oks)}[/{c('muted')}]")
+        return
+    if oks:
+        console.print(f"[{c('muted')}]✓ {_short(oks)}[/{c('muted')}]")
+    for l, d in warns:
+        console.print(f"[{c('warn')}]⚠ {l}: {d}[/{c('warn')}]")
+    for l, d in fails:
+        console.print(f"[{c('err')}]✗ {l}[/{c('err')}]"
+                      + (f" [{c('muted')}]{d}[/{c('muted')}]" if d else ""))
+
+
+def workspace_line():
+    """Path workspace, subtle: dim + dipadatkan ke 2 komponen terakhir
+    kalau terlalu panjang (mis. path Termux)."""
+    ws = str(getattr(config, "WORKSPACE", "") or "")
+    parts = [p for p in ws.split("/") if p]
+    short = ws
+    if len(ws) > 34 and len(parts) >= 2:
+        short = "…/" + "/".join(parts[-2:])
+    if short:
+        console.print(f"[{c('muted')}]{short}[/{c('muted')}]")
 
 
 # ── v3.8 input layer: history + tab-completion + prompt rapi ─────────
