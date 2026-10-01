@@ -616,12 +616,19 @@ def main():
                 _cmd_config()
                 continue
 
-            if cmd in ("/clear", "/restart", "/hapus"):
+            if cmd in ("/clear", "/hapus", "/new"):
                 if len(messages) > 1:
-                    sp = ui.save_snapshot(turn_counter[0], "/clear", _last_assistant(messages), done_actions_log)
+                    sp = ui.save_snapshot(turn_counter[0], cmd, _last_assistant(messages), done_actions_log)
                     console.print(f"[dim]snapshot saved: {sp}[/dim]")
                 messages = _new_messages()
-                console.print("[bold green]✓ session reset (snapshot saved)[/bold green]")
+                turn_counter[0] = 0
+                done_actions_log.clear()
+                console.print("[bold green]✓ sesi baru (fresh, snapshot tersimpan)[/bold green]")
+                continue
+
+            if cmd == "/restart":
+                messages[0] = {"role": "system", "content": _refreshed_sysprompt()}
+                console.print("[bold green]✓ system prompt di-reload (riwayat chat tetap)[/bold green]")
                 continue
 
             if cmd == "/self":
@@ -646,6 +653,10 @@ def main():
                     f"4) bump version in `{config.VERSION_FILE}` and append to `{config.CHANGELOG_FILE}`. "
                     f"5) tell user to /restart."
                 )
+
+            if user_input.startswith("/") and not cmd.startswith(("/save", "/load", "/task", "/experience")):
+                console.print(f"[bold yellow]⚠ unknown command: {user_input.split()[0]} — /help buat daftar command[/bold yellow]")
+                continue
 
             messages.append({"role": "user", "content": user_input})
             _auto_ground(messages)

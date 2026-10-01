@@ -38,7 +38,7 @@ key = "sk-routerku"                   # any non-empty key works (routerku bypass
 default = "Free-All"                  # model awal
 max_tokens = 2048
 temperature = 0.4
-max_tool_rounds = 8                   # max tool-loop per turn
+max_tool_rounds = 24                  # max tool-loop per turn (dinaikkan dari 8: file besar/chunked write butuh >8 ronde)
 window_size = 17                      # sliding window (mode 3)
 failover = ["Free-All", "Free-Kombo", "L"]  # chain failover v2.1
 stream = true                         # SSE streaming v2.1 (teks realtime)
@@ -138,7 +138,7 @@ _DERIVED = [
     ("DEFAULT_MODEL",   ("model", "default", None)),
     ("MAX_TOKENS",      ("model", "max_tokens", 16384), int),
     ("TEMPERATURE",     ("model", "temperature", 0.4), float),
-    ("MAX_TOOL_ROUNDS", ("model", "max_tool_rounds", 8), int),
+    ("MAX_TOOL_ROUNDS", ("model", "max_tool_rounds", 24), int),
     ("MAX_CONTINUE_ROUNDS", ("model", "max_continue_rounds", 12), int),
     ("WINDOW_SIZE",     ("model", "window_size", 17), int),
     ("PERSONA_MODE",    ("persona", "mode", "bypass"), str),
